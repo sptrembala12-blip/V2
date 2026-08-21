@@ -1172,6 +1172,69 @@ tr:hover td {
 .cfg-kv:last-of-type { border-bottom: none; }
 .cfg-kv strong { color: var(--text-primary); font-weight: 600; text-align: right; }
 
+/* Editor de avatar (foto de perfil) */
+.avatar-edit {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  cursor: pointer;
+  outline: 2px dashed transparent;
+  outline-offset: 3px;
+  transition: outline-color .15s ease, transform .15s ease;
+}
+.avatar-edit:hover { transform: translateY(-1px); }
+.avatar-edit.dragover { outline-color: var(--accent); }
+.avatar-edit-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  border: 2px solid var(--border);
+}
+.avatar-edit-img img { width: 100%; height: 100%; object-fit: cover; }
+.avatar-edit-initial { font-size: 36px; font-weight: 800; }
+.avatar-edit-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity .15s ease;
+  font-size: 11px;
+  font-weight: 600;
+}
+.avatar-edit-overlay svg { width: 20px; height: 20px; }
+.avatar-edit:hover .avatar-edit-overlay,
+.avatar-edit.dragover .avatar-edit-overlay { opacity: 1; }
+.avatar-edit-spinner {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+.avatar-edit.uploading .avatar-edit-spinner { display: flex; }
+.avatar-edit.uploading .avatar-edit-overlay { opacity: 0 !important; }
+.avatar-edit-spinner .spin { display: inline-flex; animation: avatar-spin 0.8s linear infinite; }
+.avatar-edit-spinner .spin svg { width: 22px; height: 22px; }
+@keyframes avatar-spin { to { transform: rotate(360deg); } }
+
 .theme-options-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

@@ -2402,15 +2402,23 @@ async function renderSettingsPerfil(panel) {
     <div class="settings-grid">
       <div class="card">
         <div class="section-title" style="margin-top:0">${ICONS.user} Foto de Perfil</div>
-        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-          <div id="avatar-preview" style="width:84px;height:84px;border-radius:50%;overflow:hidden;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:32px;font-weight:800;flex-shrink:0">
-            ${avatarUrl ? `<img src="${avatarUrl}" style="width:100%;height:100%;object-fit:cover">` : initial}
+        <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+          <div id="avatar-dropzone" class="avatar-edit" title="Clique ou arraste uma imagem">
+            <div id="avatar-preview" class="avatar-edit-img">
+              ${avatarUrl ? `<img src="${avatarUrl}" alt="avatar">` : `<span class="avatar-edit-initial">${esc(initial)}</span>`}
+            </div>
+            <div class="avatar-edit-overlay">${ICONS.upload}<span>Alterar</span></div>
+            <div class="avatar-edit-spinner"><span class="spin">${ICONS.refresh}</span></div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:8px">
-            <input type="file" id="avatar-file" accept="image/*" style="display:none">
-            <button class="btn sm" id="btn-upload-avatar">${ICONS.upload} Enviar foto</button>
-            ${p.avatar_url ? `<button class="btn sm ghost" id="btn-remove-avatar">${ICONS.trash} Remover</button>` : ""}
-            <div style="font-size:10.5px;color:var(--text-muted)">JPG/PNG até 8 MB. Metadados removidos.</div>
+          <div style="display:flex;flex-direction:column;gap:8px;min-width:150px">
+            <input type="file" id="avatar-file" accept="image/jpeg,image/png,image/webp" style="display:none">
+            <button class="btn sm" id="btn-upload-avatar">${ICONS.upload} ${p.avatar_url ? "Trocar foto" : "Enviar foto"}</button>
+            ${p.avatar_url ? `<button class="btn sm ghost" id="btn-remove-avatar">${ICONS.trash} Remover foto</button>` : ""}
+            <div style="font-size:11px;color:var(--text-muted);line-height:1.5;margin-top:2px">
+              ${ICONS.check} JPG, PNG ou WebP<br>
+              ${ICONS.check} Até 8 MB · quadrada fica melhor<br>
+              ${ICONS.shield} Metadados removidos automaticamente
+            </div>
           </div>
         </div>
       </div>
@@ -2438,15 +2446,50 @@ async function renderSettingsPerfil(panel) {
   `;
 
   const fileInput = $("#avatar-file");
-  $("#btn-upload-avatar").onclick = () => fileInput.click();
-  fileInput.onchange = async () => {
-    if (!fileInput.files || !fileInput.files.length) return;
-    const fd = new FormData(); fd.append("file", fileInput.files[0]);
-    try { await api("/api/security/avatar", { method: "POST", form: fd }); toast("Foto atualizada!", "ok"); renderSettingsTab(); }
-    catch (err) { toast(err.message, "err"); }
+  const dz = $("#avatar-dropzone");
+
+  const sendAvatar = async (file) => {
+    if (!file) return;
+    // Validação no cliente com mensagens claras
+    const okTypes = ["image/jpeg", "image/png", "image/webp"];
+    if (!okTypes.includes(file.type)) {
+      toast("Formato inválido. Use JPG, PNG ou WebP.", "err");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast(`Imagem muito grande (${fmtSize(file.size)}). O limite é 8 MB.`, "err");
+      return;
+    }
+    if (dz) dz.classList.add("uploading");
+    const fd = new FormData(); fd.append("file", file);
+    try {
+      await api("/api/security/avatar", { method: "POST", form: fd });
+      toast("Foto de perfil atualizada!", "ok");
+      renderSettingsTab();
+    } catch (err) {
+      toast(err.message, "err");
+      if (dz) dz.classList.remove("uploading");
+    }
   };
+
+  $("#btn-upload-avatar").onclick = () => fileInput.click();
+  if (dz) dz.onclick = () => fileInput.click();
+  fileInput.onchange = () => { if (fileInput.files && fileInput.files.length) sendAvatar(fileInput.files[0]); };
+
+  // Arrastar e soltar sobre o avatar
+  if (dz) {
+    ["dragover", "dragenter"].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add("dragover"); }));
+    ["dragleave", "dragend"].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove("dragover"); }));
+    dz.addEventListener("drop", (e) => {
+      e.preventDefault(); dz.classList.remove("dragover");
+      if (e.dataTransfer.files && e.dataTransfer.files.length) sendAvatar(e.dataTransfer.files[0]);
+    });
+  }
+
   const btnRemove = $("#btn-remove-avatar");
   if (btnRemove) btnRemove.onclick = async () => {
+    const ok = await confirmDialog("Deseja remover sua foto de perfil?", "Remover", "danger");
+    if (!ok) return;
     try { await api("/api/security/avatar", { method: "DELETE" }); toast("Foto removida.", "ok"); renderSettingsTab(); }
     catch (err) { toast(err.message, "err"); }
   };
