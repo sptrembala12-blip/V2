@@ -69,7 +69,17 @@ const state = {
   view: "dashboard",
   selectedMediaAccountId: null,
   pollTimer: null,
+  uploading: false,
 };
+
+// Alerta o usuário se ele tentar recarregar/fechar a aba durante um upload ativo.
+window.addEventListener("beforeunload", (e) => {
+  if (state.uploading) {
+    e.preventDefault();
+    e.returnValue = "";
+    return "";
+  }
+});
 
 /* ---------------- Sistema de Tema (Claro / Escuro / Automático) ---------------- */
 function getEffectiveTheme(pref) {
@@ -373,7 +383,13 @@ function clearPoll() {
 }
 function startPoll(fn, ms) {
   clearPoll();
-  state.pollTimer = setInterval(fn, ms);
+  state.pollTimer = setInterval(() => {
+    // Nunca dispara polling enquanto há um upload em andamento nem quando a aba
+    // está em segundo plano (evita recarregar a lista e concorrer por banda).
+    if (state.uploading) return;
+    if (document.hidden) return;
+    fn();
+  }, ms);
 }
 
 /* ---------------- Navegação de Abas & Drawer Control ---------------- */
@@ -1196,6 +1212,9 @@ function bindMediaUploader() {
 async function refreshMediaList() {
   const wrap = $("#media-list-wrap");
   if (!wrap) return;
+  // Durante um upload ativo não reconstruímos a grade (recriaria todos os vídeos
+  // e concorreria com o envio). A lista é atualizada ao final do upload.
+  if (state.uploading) return;
   let medias = [];
   try {
     const url = state.selectedMediaAccountId ? `/api/media?account_id=${state.selectedMediaAccountId}` : "/api/media";
@@ -1341,35 +1360,114 @@ function bindMediaActions(medias) {
   });
 }
 
+// Upload com barra de progresso real (XHR expõe progresso; fetch não).
+function uploadBatchWithProgress(fd, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/media/upload");
+    if (state.token) {
+      xhr.setRequestHeader("Authorization", "Bearer " + state.token);
+      xhr.setRequestHeader("X-Auth-Token", state.token);
+    }
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(e.loaded, e.total);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        let data = null;
+        try { data = JSON.parse(xhr.responseText); } catch {}
+        resolve(data);
+      } else {
+        let msg = `Erro HTTP ${xhr.status}`;
+        try { const d = JSON.parse(xhr.responseText); if (d && d.detail) msg = typeof d.detail === "string" ? d.detail : msg; } catch {}
+        reject(new Error(msg));
+      }
+    };
+    xhr.onerror = () => reject(new Error("Falha de rede durante o envio."));
+    xhr.onabort = () => reject(new Error("Envio cancelado."));
+    xhr.send(fd);
+  });
+}
+
+function renderUploadProgress({ done, total, uploadedBytes, totalBytes, currentName }) {
+  const box = $("#upload-progress-container");
+  if (!box) return;
+  const pct = totalBytes > 0 ? Math.min(100, Math.round((uploadedBytes / totalBytes) * 100)) : 0;
+  box.innerHTML = `
+    <div class="card" style="margin:14px 0;border-left:4px solid var(--accent)">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <div style="font-size:12.5px;font-weight:700;color:var(--text-primary);display:flex;align-items:center;gap:8px">
+          <span class="dot pulse-dot" style="background:var(--accent)"></span>
+          Enviando mídias — ${done}/${total} arquivos concluídos
+        </div>
+        <div style="font-size:12px;color:var(--text-secondary);font-weight:700">${pct}% · ${fmtSize(uploadedBytes)} / ${fmtSize(totalBytes)}</div>
+      </div>
+      <div style="height:10px;background:var(--bg-card-sub);border-radius:99px;overflow:hidden;border:1px solid var(--border)">
+        <div style="height:100%;width:${pct}%;background:var(--accent);border-radius:99px;transition:width .2s ease"></div>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:8px;display:flex;align-items:center;gap:6px">
+        ${ICONS.upload} Não feche nem recarregue esta página até concluir. ${currentName ? `Enviando: <strong>${esc(currentName)}</strong>` : ""}
+      </div>
+    </div>`;
+}
+
 async function uploadFiles(files) {
   if (!files || !files.length) return;
+  if (state.uploading) { toast("Já existe um upload em andamento. Aguarde a conclusão.", "err"); return; }
+
   const fileList = Array.from(files);
   const totalFiles = fileList.length;
   const targetAccId = $("#media-upload-target-account")?.value || null;
-
-  let uploadedCount = 0;
   const totalBytes = fileList.reduce((acc, f) => acc + f.size, 0);
 
   const BATCH_SIZE = 4;
-  toast(`Enviando ${totalFiles} arquivo(s) com limpeza de metadados...`, "");
+  let uploadedCount = 0;
+  let baseBytes = 0;          // bytes de lotes já concluídos
+  const errors = [];
 
-  for (let i = 0; i < totalFiles; i += BATCH_SIZE) {
-    const batch = fileList.slice(i, i + BATCH_SIZE);
-    const fd = new FormData();
-    batch.forEach((f) => fd.append("files", f));
-    if (targetAccId) fd.append("account_id", targetAccId);
+  state.uploading = true;
+  clearPoll();               // pausa qualquer polling enquanto envia
+  renderUploadProgress({ done: 0, total: totalFiles, uploadedBytes: 0, totalBytes, currentName: fileList[0]?.name });
+  toast(`Enviando ${totalFiles} arquivo(s)... Não feche a página.`, "");
 
-    try {
-      await api("/api/media/upload", { method: "POST", form: fd });
-      uploadedCount += batch.length;
-      refreshMediaList();
-    } catch (err) {
-      toast(`Erro: ${err.message}`, "err");
+  try {
+    for (let i = 0; i < totalFiles; i += BATCH_SIZE) {
+      const batch = fileList.slice(i, i + BATCH_SIZE);
+      const batchBytes = batch.reduce((a, f) => a + f.size, 0);
+      const fd = new FormData();
+      batch.forEach((f) => fd.append("files", f));
+      if (targetAccId) fd.append("account_id", targetAccId);
+
+      try {
+        await uploadBatchWithProgress(fd, (loaded) => {
+          renderUploadProgress({
+            done: uploadedCount,
+            total: totalFiles,
+            uploadedBytes: baseBytes + Math.min(loaded, batchBytes),
+            totalBytes,
+            currentName: batch[0]?.name,
+          });
+        });
+        uploadedCount += batch.length;
+        baseBytes += batchBytes;
+        renderUploadProgress({ done: uploadedCount, total: totalFiles, uploadedBytes: baseBytes, totalBytes, currentName: fileList[Math.min(i + BATCH_SIZE, totalFiles - 1)]?.name });
+      } catch (err) {
+        errors.push(err.message);
+        baseBytes += batchBytes; // avança a barra mesmo em erro de lote
+      }
     }
+  } finally {
+    state.uploading = false;
+    const box = $("#upload-progress-container");
+    if (box) box.innerHTML = "";
   }
 
-  toast(`${uploadedCount} mídias adicionadas com sucesso!`, "ok");
+  if (uploadedCount > 0) toast(`${uploadedCount} mídia(s) adicionada(s) com sucesso!`, "ok");
+  if (errors.length) toast(`${errors.length} lote(s) com erro: ${errors[0]}`, "err");
+
+  // Atualiza a grade só uma vez, ao final, e retoma o polling normal.
   refreshMediaList();
+  startPoll(refreshMediaList, VIEWS.midias.poll);
 }
 
 /* ==========================================================================
@@ -2422,12 +2520,14 @@ function init() {
 
   $$(".nav-btn").forEach((b) => {
     b.onclick = () => {
+      if (state.uploading) { toast("Aguarde o upload terminar antes de trocar de tela.", "err"); return; }
       state.view = b.dataset.view;
       render();
     };
   });
   $$(".mobile-nav-item").forEach((b) => {
     b.onclick = () => {
+      if (state.uploading) { toast("Aguarde o upload terminar antes de trocar de tela.", "err"); return; }
       state.view = b.dataset.view;
       render();
     };
