@@ -20,3 +20,4 @@ venv/
 # Binários grandes / artefatos redundantes (não versionar)
 cloudflared
 instaflow.zip
+.env
