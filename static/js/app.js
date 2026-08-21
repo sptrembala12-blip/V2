@@ -12,6 +12,7 @@ const ICONS = {
   calendar: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`,
   publish: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>`,
   settings: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`,
+  download: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`,
   sun: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>`,
   moon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`,
   user: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>`,
@@ -2115,9 +2116,20 @@ async function refreshLogsList() {
 async function initConfiguracoes() {
   const c = $("#content");
   let settings = null;
+  let sysinfo = null;
   try { settings = await api("/api/auth/settings"); } catch (err) { return; }
+  try { sysinfo = await api("/api/auth/system-info"); } catch { sysinfo = null; }
 
   const currentTheme = state.theme || "auto";
+  const lim = (sysinfo && sysinfo.limits) || {};
+  const sec = (sysinfo && sysinfo.security) || {};
+
+  const emailBadge = sysinfo && sysinfo.email_configured
+    ? `<span class="badge green"><span class="dot"></span>SMTP Ativo</span>`
+    : `<span class="badge amber"><span class="dot"></span>Código na tela (SMTP não configurado)</span>`;
+  const secretBadge = sec.secret_key_configured
+    ? `<span class="badge green"><span class="dot"></span>SECRET_KEY definida</span>`
+    : `<span class="badge amber"><span class="dot"></span>SECRET_KEY ausente</span>`;
 
   c.innerHTML = `
     <div class="settings-grid">
@@ -2143,17 +2155,44 @@ async function initConfiguracoes() {
       <!-- Dados da Conta -->
       <div class="card">
         <div class="section-title" style="margin-top:0">${ICONS.user} Dados da Conta</div>
-        <div style="font-size:12.5px;color:var(--text-secondary);margin-bottom:10px">
+        <div style="font-size:12.5px;color:var(--text-secondary);margin-bottom:6px">
           E-mail de Acesso: <strong>${esc(settings.email)}</strong>
         </div>
-        <div style="font-size:11.5px;color:var(--green)">${ICONS.check} Conta Verificada e Protegida</div>
+        <div style="font-size:11.5px;color:var(--green);margin-bottom:12px">${ICONS.check} Conta Verificada e Protegida</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn sm ghost" id="btn-export-data">${ICONS.download || ""} Exportar meus dados</button>
+          <button class="btn sm ghost" id="btn-logout-all">${ICONS.shield} Sair de todos os dispositivos</button>
+        </div>
+      </div>
+
+      <!-- Automação & Limites -->
+      <div class="card">
+        <div class="section-title" style="margin-top:0">${ICONS.shield} Automação & Segurança Anti-Ban</div>
+        <div class="cfg-kv"><span>Limite de posts por conta (24h)</span><strong>${lim.max_posts_per_day ?? "—"}</strong></div>
+        <div class="cfg-kv"><span>Tentativas automáticas em falha de rede</span><strong>${lim.network_retry_attempts ?? "—"}</strong></div>
+        <div class="cfg-kv"><span>Workers de postagem paralela</span><strong>${lim.posting_workers ?? "—"}</strong></div>
+        <div class="cfg-kv"><span>Upload máximo por arquivo</span><strong>${lim.max_upload_mb ?? "—"} MB</strong></div>
+        <div class="cfg-kv"><span>Retenção de logs</span><strong>${lim.log_retention_days ? lim.log_retention_days + " dias" : "Permanente"}</strong></div>
+        <div class="cfg-kv"><span>Health-check de contas</span><strong>${lim.account_healthcheck_minutes ? "a cada " + lim.account_healthcheck_minutes + " min" : "Desligado"}</strong></div>
+        <div style="font-size:10.5px;color:var(--text-muted);margin-top:8px">Configurável via variáveis de ambiente (.env).</div>
+      </div>
+
+      <!-- Sistema -->
+      <div class="card">
+        <div class="section-title" style="margin-top:0">${ICONS.settings} Sistema</div>
+        <div class="cfg-kv"><span>Versão</span><strong>v${sysinfo ? sysinfo.version : "—"}</strong></div>
+        <div class="cfg-kv"><span>Ambiente</span><strong>${sysinfo ? sysinfo.environment : "—"}</strong></div>
+        <div class="cfg-kv"><span>Banco de dados</span><strong>${sysinfo ? sysinfo.database : "—"}</strong></div>
+        <div class="cfg-kv"><span>Fuso horário</span><strong>${sysinfo ? sysinfo.timezone : "—"}</strong></div>
+        <div class="cfg-kv"><span>Sessão expira em</span><strong>${lim.session_ttl_days ? lim.session_ttl_days + " dias" : "Nunca"}</strong></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">${emailBadge} ${secretBadge}</div>
       </div>
 
       <!-- Trocar Senha com Verificação por E-mail -->
       <div class="card" style="grid-column: 1 / -1">
         <div class="section-title" style="margin-top:0">${ICONS.key} Redefinir Senha de Acesso (Confirmação por E-mail)</div>
         <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">
-          Para alterar sua senha, clique no botão abaixo para receber um código de segurança de 6 dígitos no seu e-mail cadastrado (<strong>${esc(settings.email)}</strong>).
+          Para alterar sua senha, clique no botão abaixo para receber um código de segurança de 6 dígitos no seu e-mail cadastrado (<strong>${esc(settings.email)}</strong>). A nova senha precisa ter no mínimo ${sec.min_password_length || 8} caracteres, com letra e número.
         </div>
 
         <div style="margin-bottom:12px">
@@ -2162,7 +2201,7 @@ async function initConfiguracoes() {
 
         <div class="row">
           <input class="input" id="cfg-pwd-code-input" placeholder="Código de 6 Dígitos" style="font-size:12px">
-          <input class="input" type="password" id="cfg-new-pwd-input" placeholder="Nova Senha (Mínimo 4 caracteres)" style="font-size:12px">
+          <input class="input" type="password" id="cfg-new-pwd-input" placeholder="Nova Senha (mín. ${sec.min_password_length || 8}, letra + número)" style="font-size:12px">
           <button class="btn primary sm" id="btn-submit-new-pwd">${ICONS.check} Confirmar Nova Senha</button>
         </div>
       </div>
@@ -2181,6 +2220,42 @@ async function initConfiguracoes() {
       } catch {}
     };
   });
+
+  // Exportar dados do usuário (download JSON)
+  const btnExport = $("#btn-export-data");
+  if (btnExport) btnExport.onclick = async () => {
+    btnExport.disabled = true;
+    try {
+      const data = await api("/api/auth/export-data");
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `instaflow-dados-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      toast("Dados exportados com sucesso!", "ok");
+    } catch (err) {
+      toast(err.message || "Falha ao exportar dados.", "err");
+    } finally {
+      btnExport.disabled = false;
+    }
+  };
+
+  // Encerrar sessão em todos os dispositivos
+  const btnLogoutAll = $("#btn-logout-all");
+  if (btnLogoutAll) btnLogoutAll.onclick = async () => {
+    if (!confirm("Encerrar a sessão em TODOS os dispositivos? Você precisará entrar novamente.")) return;
+    btnLogoutAll.disabled = true;
+    try {
+      const res = await api("/api/auth/logout-all", { method: "POST" });
+      toast(res.message || "Sessões encerradas.", "ok");
+      setTimeout(() => logout(true), 800);
+    } catch (err) {
+      toast(err.message || "Falha ao encerrar sessões.", "err");
+      btnLogoutAll.disabled = false;
+    }
+  };
 
   // Solicitar Código de Senha por E-mail
   $("#btn-request-pwd-code").onclick = async () => {

@@ -256,8 +256,117 @@ def toggle_two_factor(body: TwoFactorToggleIn, user: models.User = Depends(get_c
 
 
 @router.post("/logout")
-def logout(response: Response,
+def logout(request: Request, response: Response,
            user: models.User = Depends(get_current_user),
            db: Session = Depends(get_db)):
+    # Revoga o token atual (não só apaga o cookie), encerrando a sessão de fato.
+    token = ""
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        token = auth[7:].strip()
+    token = token or request.cookies.get("token", "")
+    if token:
+        db.query(models.AuthToken).filter(models.AuthToken.token == token).delete()
+        db.commit()
     response.delete_cookie("token")
     return {"ok": True}
+
+
+@router.post("/logout-all")
+def logout_all(response: Response,
+               user: models.User = Depends(get_current_user),
+               db: Session = Depends(get_db)):
+    """Encerra a sessão em todos os dispositivos (revoga todos os tokens)."""
+    count = db.query(models.AuthToken).filter(models.AuthToken.user_id == user.id).delete()
+    db.commit()
+    response.delete_cookie("token")
+    return {"ok": True, "sessions_revoked": count, "message": f"{count} sessão(ões) encerradas em todos os dispositivos."}
+
+
+@router.post("/change-password")
+def change_password(body: ChangePasswordIn,
+                    user: models.User = Depends(get_current_user),
+                    db: Session = Depends(get_db)):
+    """Altera a senha diretamente (conhecendo a senha atual), sem código de e-mail."""
+    if not security.verify_password(body.current_password, user.password_hash):
+        raise HTTPException(400, detail="Senha atual incorreta.")
+    ok, msg = security.validate_password_strength(body.new_password)
+    if not ok:
+        raise HTTPException(400, detail=msg)
+    user.password_hash = security.hash_password(body.new_password)
+    db.commit()
+    return {"ok": True, "message": "Senha alterada com sucesso!"}
+
+
+@router.get("/export-data")
+def export_data(user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Exporta todos os dados do usuário (LGPD/portabilidade), sem segredos."""
+    accounts = db.query(models.Account).filter(models.Account.user_id == user.id).all()
+    medias = db.query(models.Media).filter(models.Media.user_id == user.id).all()
+    schedules = db.query(models.Schedule).filter(models.Schedule.user_id == user.id).all()
+    logs = db.query(models.PostLog).filter(models.PostLog.user_id == user.id).all()
+
+    def _dt(v):
+        return v.isoformat() if v else None
+
+    return {
+        "exported_at": models.utcnow().isoformat(),
+        "user": {"id": user.id, "email": user.email, "name": user.name, "created_at": _dt(user.created_at)},
+        "accounts": [
+            {
+                "id": a.id, "name": a.name, "ig_username": a.ig_username,
+                "status": a.status, "simulate": a.simulate,
+                "followers": a.follower_count, "following": a.following_count,
+                "posts": a.media_count, "created_at": _dt(a.created_at),
+            }
+            for a in accounts
+        ],
+        "medias": [
+            {"id": m.id, "name": m.original_name, "kind": m.kind, "times_used": m.times_used}
+            for m in medias
+        ],
+        "schedules": [
+            {"id": s.id, "name": s.name, "mode": s.mode, "target_type": s.target_type, "enabled": s.enabled}
+            for s in schedules
+        ],
+        "post_logs": [
+            {
+                "id": l.id, "account": l.account_name, "action": l.action,
+                "status": l.status, "message": l.message, "created_at": _dt(l.created_at),
+            }
+            for l in logs
+        ],
+        "totals": {
+            "accounts": len(accounts), "medias": len(medias),
+            "schedules": len(schedules), "post_logs": len(logs),
+        },
+    }
+
+
+@router.get("/system-info")
+def system_info(user: models.User = Depends(get_current_user)):
+    """Informações do sistema e limites de automação (para o painel de Configurações)."""
+    is_postgres = "postgres" in config.DATABASE_URL.lower()
+    return {
+        "version": config.APP_VERSION,
+        "environment": config.ENVIRONMENT,
+        "database": "PostgreSQL" if is_postgres else "SQLite",
+        "timezone": config.APP_TZ,
+        "email_configured": email_service.is_smtp_configured(),
+        "limits": {
+            "max_posts_per_day": config.MAX_POSTS_PER_DAY,
+            "max_upload_mb": config.MAX_UPLOAD_MB,
+            "posting_workers": config.POSTING_WORKERS,
+            "network_retry_attempts": config.NETWORK_RETRY_ATTEMPTS,
+            "log_retention_days": config.LOG_RETENTION_DAYS,
+            "session_ttl_days": config.SESSION_TTL_DAYS,
+            "account_healthcheck_minutes": config.ACCOUNT_HEALTHCHECK_MINUTES,
+        },
+        "security": {
+            "min_password_length": config.MIN_PASSWORD_LENGTH,
+            "login_max_attempts": config.LOGIN_MAX_ATTEMPTS,
+            "require_email_verification": config.REQUIRE_EMAIL_VERIFICATION,
+            "cors_restricted": bool(config.CORS_ORIGINS),
+            "secret_key_configured": not config.secret_is_ephemeral(),
+        },
+    }
