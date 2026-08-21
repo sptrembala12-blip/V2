@@ -22,7 +22,7 @@ class GenerateEmailIn(BaseModel):
 @router.post("/generate")
 def generate_email(body: GenerateEmailIn = GenerateEmailIn(),
                    user: User = Depends(get_current_user)):
-    """Gera um e-mail temporário compatível com Instagram para receber códigos de confirmação."""
+    """Gera um e-mail temporário temporário para receber códigos de verificação de qualquer serviço."""
     try:
         if body.provider == "guerrilla":
             data = TempEmailService.generate_guerrilla()
@@ -34,7 +34,15 @@ def generate_email(body: GenerateEmailIn = GenerateEmailIn(),
                 data = TempEmailService.generate_guerrilla()
         return data
     except Exception as e:
-        raise HTTPException(500, detail=f"Erro ao gerar e-mail temporário: {e}") from e
+        raise HTTPException(
+            502,
+            detail=(
+                "Não foi possível conectar aos provedores de e-mail temporário agora. "
+                "Isso costuma acontecer quando o servidor está sem acesso à internet de "
+                "saída (comum no ambiente de teste/preview). Tente novamente em um servidor "
+                "com internet ou troque o provedor."
+            ),
+        ) from e
 
 
 @router.get("/inbox")

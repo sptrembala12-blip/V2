@@ -1,5 +1,6 @@
 """
-Serviço de E-mails Temporários compatíveis com Instagram e extração de códigos 2FA/Confirmação.
+Serviço de E-mails Temporários descartáveis e extração automática de códigos de
+verificação (OTP) de qualquer serviço — 4 a 8 dígitos.
 """
 from __future__ import annotations
 
@@ -9,37 +10,59 @@ import httpx
 from typing import Optional, Dict, Any, List
 
 
-def extract_instagram_code(text: str, subject: str = "") -> Optional[str]:
-    """Extrai automaticamente códigos de 6 dígitos enviados pelo Instagram/Meta."""
+def extract_verification_code(text: str, subject: str = "") -> Optional[str]:
+    """Extrai automaticamente códigos de verificação (OTP) de 4 a 8 dígitos.
+
+    Funciona com qualquer serviço (Instagram, Google, bancos, apps, etc.).
+    Estratégia, da mais confiável para a mais genérica:
+      1. Código próximo de palavras-chave ("código", "code", "OTP", "verification").
+      2. Padrão 3+3 com espaço/hífen (ex.: "123 456" / "123-456").
+      3. Qualquer sequência isolada de 4 a 8 dígitos.
+    Ignora anos comuns (ex.: 2024/2026) para reduzir falsos positivos.
+    """
     full_text = f"{subject}\n{text}"
-    
-    # 1. Padrão explícito do Instagram ("123456 é o seu código do Instagram" ou "123 456")
-    m_ig = re.search(r"(\d{3}\s?\d{3})\s*(?:is your Instagram code|é o seu código|é seu código|is your code|código)", full_text, re.IGNORECASE)
-    if m_ig:
-        return m_ig.group(1).replace(" ", "")
 
-    m_prefix = re.search(r"(?:code|código|código de confirmação|confirmation code|security code)[:\s]+(\d{6})", full_text, re.IGNORECASE)
+    # 1. Código ancorado a palavras-chave (antes ou depois)
+    m_prefix = re.search(
+        r"(?:c[oó]digo(?:\s+de\s+(?:confirma[cç][aã]o|verifica[cç][aã]o|seguran[cç]a))?|code|otp|verification code|security code|confirmation code|pin)[:\s#]*?(\d[\d\s-]{2,9}\d)",
+        full_text, re.IGNORECASE,
+    )
     if m_prefix:
-        return m_prefix.group(1)
+        digits = re.sub(r"\D", "", m_prefix.group(1))
+        if 4 <= len(digits) <= 8:
+            return digits
 
-    # 2. Procura sequências de 6 dígitos no texto
-    matches = re.findall(r"\b(\d{6})\b", full_text)
-    if matches:
-        # Retorna o primeiro código válido encontrado
-        return matches[0]
+    m_suffix = re.search(
+        r"(\d[\d\s-]{2,9}\d)\s*(?:is your|é o seu|é seu|is the|é o)?\s*(?:c[oó]digo|code|otp|verification|security code)",
+        full_text, re.IGNORECASE,
+    )
+    if m_suffix:
+        digits = re.sub(r"\D", "", m_suffix.group(1))
+        if 4 <= len(digits) <= 8:
+            return digits
 
-    # 3. Formato 3 dígitos + espaço + 3 dígitos (ex: 123 456)
-    m_space = re.findall(r"\b(\d{3})\s(\d{3})\b", full_text)
-    if m_space:
-        return f"{m_space[0][0]}{m_space[0][1]}"
+    # 2. Padrão 3+3 com separador (ex.: "123 456" ou "123-456")
+    m_split = re.search(r"\b(\d{3})[\s-](\d{3})\b", full_text)
+    if m_split:
+        return f"{m_split.group(1)}{m_split.group(2)}"
+
+    # 3. Sequência isolada de 4 a 8 dígitos (ignorando anos plausíveis)
+    for match in re.findall(r"\b(\d{4,8})\b", full_text):
+        if len(match) == 4 and 1990 <= int(match) <= 2099:
+            continue  # provavelmente um ano, não um código
+        return match
 
     return None
+
+
+# Compatibilidade retroativa (nome antigo usado em imports internos)
+extract_instagram_code = extract_verification_code
 
 
 class TempEmailService:
     @staticmethod
     def generate_mailtm(prefix: Optional[str] = None) -> Dict[str, Any]:
-        """Gera conta no Mail.tm (domínios limpos aceitos pelo Instagram)."""
+        """Gera uma caixa temporária no Mail.tm (domínios estáveis)."""
         with httpx.Client(timeout=12) as client:
             r_dom = client.get("https://api.mail.tm/domains")
             if r_dom.status_code != 200:
@@ -49,7 +72,7 @@ class TempEmailService:
                 raise RuntimeError("Nenhum domínio ativo disponível no momento.")
             
             domain = domains[0]
-            user_stem = prefix.strip().lower() if prefix else f"insta{secrets.token_hex(4)}"
+            user_stem = prefix.strip().lower() if prefix else f"inbox{secrets.token_hex(4)}"
             email = f"{user_stem}@{domain}"
             password = f"Pass_{secrets.token_hex(8)}!"
 
@@ -91,7 +114,7 @@ class TempEmailService:
                 created_at = item.get("createdAt", "")
                 
                 # Extração do código do Instagram
-                code = extract_instagram_code(intro, subject)
+                code = extract_verification_code(intro, subject)
 
                 messages.append({
                     "id": msg_id,
@@ -117,7 +140,7 @@ class TempEmailService:
             body_text = data.get("text", "")
             body_html = data.get("html", "")
             subject = data.get("subject", "")
-            code = extract_instagram_code(body_text or body_html, subject)
+            code = extract_verification_code(body_text or body_html, subject)
 
             return {
                 "id": data.get("id"),
@@ -162,7 +185,7 @@ class TempEmailService:
                 subject = item.get("mail_subject", "")
                 excerpt = item.get("mail_excerpt", "")
                 from_addr = item.get("mail_from", "")
-                code = extract_instagram_code(excerpt, subject)
+                code = extract_verification_code(excerpt, subject)
                 messages.append({
                     "id": str(item.get("mail_id")),
                     "from": from_addr,
@@ -184,7 +207,7 @@ class TempEmailService:
             data = r.json()
             body = data.get("mail_body", "")
             subject = data.get("mail_subject", "")
-            code = extract_instagram_code(body, subject)
+            code = extract_verification_code(body, subject)
             return {
                 "id": str(data.get("mail_id")),
                 "from": data.get("mail_from", ""),

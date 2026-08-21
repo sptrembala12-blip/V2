@@ -422,7 +422,7 @@ const VIEWS = {
   midias: { title: "Biblioteca de Mídias", sub: "Arquivos com metadados limpos e organização por conta", poll: 6000 },
   agendamentos: { title: "Agendamentos & Disparos", sub: "Publicações automáticas com rotação inteligente", poll: 4000 },
   aquecimento: { title: "Aquecer Conta", sub: "Maturação automática anti-queda com IA e retenção humana", poll: 2500 },
-  gerador_email: { title: "Gerador de E-mail para Instagram", sub: "Caixa temporária compatível com Instagram para receber códigos de confirmação", poll: 3000 },
+  gerador_email: { title: "Gerador de E-mail Temporário", sub: "Caixa de entrada descartável que captura códigos de verificação automaticamente", poll: 3000 },
   publicacoes: { title: "Histórico de Posts", sub: "Log detalhado de execuções com hashes únicos", poll: 3500 },
   configuracoes: { title: "Configurações", sub: "Segurança, troca de senha por e-mail e preferências", poll: 10000 },
 };
@@ -1853,27 +1853,27 @@ async function initGeradorEmail() {
 
   c.innerHTML = `
     <div class="card panel-form" style="margin-bottom:18px">
-      <div class="section-title" style="margin-top:0">${ICONS.mail} Gerador de E-mail para Instagram</div>
+      <div class="section-title" style="margin-top:0">${ICONS.mail} Gerador de E-mail Temporário</div>
       <div style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;line-height:1.5">
-        Crie caixas de entrada temporárias com domínios limpos e ativos aceitos pelo Instagram. O InstaFlow monitora a caixa e <strong>extrai automaticamente o código de 6 dígitos</strong> recebido.
+        Crie uma caixa de entrada descartável em segundos, sem cadastro. Útil para receber códigos de verificação, confirmar cadastros e testar formulários sem expor seu e-mail pessoal. O InstaFlow monitora a caixa em tempo real e <strong>extrai automaticamente qualquer código de 4 a 8 dígitos</strong> recebido.
       </div>
 
       <div class="row" style="margin-bottom:12px">
         <label class="field">
           <span>Provedor de Domínio</span>
           <select class="input" id="temp-mail-provider">
-            <option value="mailtm" ${tempMailState.provider === "mailtm" ? "selected" : ""}>Mail.tm (Domínio Limpo — Alta compatibilidade)</option>
-            <option value="guerrilla" ${tempMailState.provider === "guerrilla" ? "selected" : ""}>GuerrillaMail (Alternativo / SharkLasers)</option>
+            <option value="mailtm" ${tempMailState.provider === "mailtm" ? "selected" : ""}>Mail.tm (domínio estável — recomendado)</option>
+            <option value="guerrilla" ${tempMailState.provider === "guerrilla" ? "selected" : ""}>GuerrillaMail (alternativo)</option>
           </select>
         </label>
         <label class="field">
           <span>Prefixo Personalizado (Opcional)</span>
-          <input class="input" id="temp-mail-prefix" placeholder="Ex: conta.nova, instagram.perfil">
+          <input class="input" id="temp-mail-prefix" placeholder="Ex: contato, cadastro, teste01">
         </label>
       </div>
 
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn primary" id="btn-generate-temp-mail" type="button">${ICONS.zap} Gerar Novo E-mail Compatível</button>
+        <button class="btn primary" id="btn-generate-temp-mail" type="button">${ICONS.zap} Gerar Novo E-mail</button>
       </div>
     </div>
 
@@ -1910,7 +1910,7 @@ async function initGeradorEmail() {
       toast(err.message, "err");
     } finally {
       btn.disabled = false;
-      btn.innerHTML = `${ICONS.zap} Gerar Novo E-mail Compatível`;
+      btn.innerHTML = `${ICONS.zap} Gerar Novo E-mail`;
     }
   };
 
@@ -1939,7 +1939,7 @@ function renderActiveTempMailCard() {
   wrap.innerHTML = `
     <div class="card" style="border-left:4px solid var(--accent);margin-bottom:18px;background:var(--bg-card)">
       <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.6px;font-weight:700;margin-bottom:6px">
-        E-mail Ativo para Cadastro / Verificação no Instagram
+        E-mail Temporário Ativo — use em qualquer cadastro ou verificação
       </div>
 
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -1952,7 +1952,7 @@ function renderActiveTempMailCard() {
           <div>
             <div style="font-size:11.5px;color:var(--green);font-weight:700;display:flex;align-items:center;gap:6px">
               <span class="dot pulse-dot" style="background:var(--green)"></span>
-              Código do Instagram Detectado com Sucesso!
+              Código de Verificação Detectado com Sucesso!
             </div>
             <div style="font-size:26px;font-weight:900;letter-spacing:4px;color:var(--text-primary);margin-top:2px;font-family:ui-monospace,monospace">
               ${esc(tempMailState.latestCode)}
@@ -1963,7 +1963,7 @@ function renderActiveTempMailCard() {
       ` : `
         <div style="margin-top:10px;font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:6px">
           <span class="dot pulse-dot" style="background:var(--blue)"></span>
-          Aguardando recebimento do código de confirmação do Instagram... (Atualização automática a cada 3s)
+          Aguardando o código de verificação... (a caixa é atualizada automaticamente a cada 3s)
         </div>
       `}
     </div>
@@ -1987,7 +1987,7 @@ function renderActiveTempMailCard() {
     btnCopyCode.onclick = () => {
       navigator.clipboard.writeText(tempMailState.latestCode).then(() => {
         btnCopyCode.innerHTML = `${ICONS.check} Código Copiado!`;
-        toast(`Código ${tempMailState.latestCode} copiado! Cole no Instagram.`, "ok");
+        toast(`Código ${tempMailState.latestCode} copiado!`, "ok");
         setTimeout(() => { if (btnCopyCode) btnCopyCode.innerHTML = `${ICONS.copy} Copiar Código`; }, 2000);
       });
     };
@@ -2006,12 +2006,12 @@ async function refreshTempMailInbox(manual = false) {
     tempMailState.latestCode = res.latest_code;
 
     if (res.latest_code && res.latest_code !== prevCode) {
-      toast(`Código do Instagram recebido: ${res.latest_code}!`, "ok");
+      toast(`Código de verificação recebido: ${res.latest_code}!`, "ok");
       renderActiveTempMailCard();
     }
 
     if (!msgs.length) {
-      wrap.innerHTML = `<div class="empty"><div class="empty-ico">${ICONS.mail}</div>Nenhum e-mail recebido ainda. Cole o endereço acima no Instagram e envie o código.</div>`;
+      wrap.innerHTML = `<div class="empty"><div class="empty-ico">${ICONS.mail}</div>Nenhum e-mail recebido ainda. Copie o endereço acima e use-o no cadastro ou verificação desejada.</div>`;
       if (manual) toast("Caixa de entrada atualizada. Nenhuma nova mensagem.", "");
       return;
     }
@@ -2026,10 +2026,10 @@ async function refreshTempMailInbox(manual = false) {
           <th style="text-align:right">Ação</th>
         </tr>
         ${msgs.map((m) => `
-          <tr style="${m.is_instagram ? 'background:rgba(99,102,241,0.06)' : ''}">
+          <tr style="${m.code_extracted ? 'background:rgba(99,102,241,0.06)' : ''}">
             <td>
               <div style="font-weight:700;color:var(--text-primary)">${esc(m.from)}</div>
-              ${m.is_instagram ? `<span class="badge green sm" style="font-size:9.5px;padding:1px 6px">Instagram Oficial</span>` : ""}
+              ${m.code_extracted ? `<span class="badge green sm" style="font-size:9.5px;padding:1px 6px">Código detectado</span>` : ""}
             </td>
             <td><strong>${esc(m.subject)}</strong></td>
             <td>
