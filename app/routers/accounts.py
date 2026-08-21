@@ -13,8 +13,9 @@ from .. import config, fingerprint, instagram_service, media, models, security
 from ..deps import get_current_user, get_db
 from ..main_ctx import app_ctx
 from ..schemas import (
-    AccountCreate, AccountOut, AccountProfileOut, ProfileEditIn,
-    UpdateCredentialsIn, VerifyCodeIn, normalize_proxy_url
+    AccountCreate, AccountOut, AccountProfileOut, AccountTypeChangeIn,
+    PrivacyChangeIn, ProfileEditIn, UpdateCredentialsIn, UsernameChangeIn,
+    VerifyCodeIn, normalize_proxy_url
 )
 
 router = APIRouter(prefix="/api/accounts", tags=["contas"])
@@ -395,15 +396,141 @@ def edit_account_profile(account_id: int,
 
     db.commit()
 
+    # Envia as alterações de verdade ao Instagram (nome, bio e link externo).
     if not acc.simulate:
-        cl = app_ctx.ig.get_client(acc)
         try:
+            cl = app_ctx.ig.ensure_logged_in(acc)
+            edit_fields = {}
+            if body.full_name is not None:
+                edit_fields["full_name"] = acc.full_name or ""
+            if body.external_url is not None:
+                edit_fields["external_url"] = acc.external_url or ""
+            if edit_fields:
+                cl.account_edit(**edit_fields)
             if body.biography is not None:
                 cl.account_set_biography(body.biography)
-        except Exception:
-            pass
+            app_ctx.ig.save_session(acc.id, cl)
+        except Exception as e:
+            status, detail = instagram_service.map_login_error(e)
+            return {"ok": False, "message": f"Salvo localmente, mas falhou no Instagram: {detail}"}
 
-    return {"ok": True, "message": "Perfil e Biografia atualizados com sucesso!"}
+    return {"ok": True, "message": "Perfil atualizado com sucesso no Instagram!"}
+
+
+@router.get("/{account_id}/check-username")
+def check_username_available(account_id: int, username: str,
+                             user: models.User = Depends(get_current_user),
+                             db: Session = Depends(get_db)):
+    """Verifica se um @ está disponível no Instagram antes de trocar."""
+    acc = _get_owned(db, account_id, user.id)
+    uname = username.strip().lstrip("@")
+    if not uname:
+        raise HTTPException(400, detail="Informe um nome de usuário.")
+    if acc.simulate:
+        return {"available": True, "username": uname, "message": "Disponível (modo simulação)."}
+    try:
+        cl = app_ctx.ig.ensure_logged_in(acc)
+        available = bool(cl.check_username(uname))
+        return {
+            "available": available,
+            "username": uname,
+            "message": "Disponível!" if available else "Este @ já está em uso.",
+        }
+    except Exception as e:
+        status, detail = instagram_service.map_login_error(e)
+        raise HTTPException(400, detail=detail)
+
+
+@router.post("/{account_id}/change-username", response_model=dict)
+def change_username(account_id: int, body: UsernameChangeIn,
+                    user: models.User = Depends(get_current_user),
+                    db: Session = Depends(get_db)):
+    """Troca o @ (username) da conta no Instagram."""
+    acc = _get_owned(db, account_id, user.id)
+    new_uname = body.new_username.strip().lstrip("@")
+    if not new_uname:
+        raise HTTPException(400, detail="Informe o novo nome de usuário.")
+
+    if acc.simulate:
+        acc.ig_username = new_uname
+        db.commit()
+        return {"ok": True, "username": new_uname, "message": "Nome de usuário atualizado (simulação)."}
+
+    try:
+        cl = app_ctx.ig.ensure_logged_in(acc)
+        cl.account_edit(username=new_uname)
+        acc.ig_username = new_uname
+        db.commit()
+        app_ctx.ig.save_session(acc.id, cl)
+        return {
+            "ok": True,
+            "username": new_uname,
+            "message": f"@ alterado para @{new_uname} com sucesso! (O Instagram limita trocas a cada ~14 dias.)",
+        }
+    except Exception as e:
+        status, detail = instagram_service.map_login_error(e)
+        raise HTTPException(400, detail=f"Falha ao trocar o @: {detail}")
+
+
+@router.post("/{account_id}/account-type", response_model=dict)
+def change_account_type(account_id: int, body: AccountTypeChangeIn,
+                        user: models.User = Depends(get_current_user),
+                        db: Session = Depends(get_db)):
+    """Converte a conta entre Pessoal, Profissional/Business e Criador."""
+    acc = _get_owned(db, account_id, user.id)
+
+    if acc.simulate:
+        return {"ok": True, "account_type": body.account_type, "message": "Tipo de conta alterado (simulação)."}
+
+    try:
+        cl = app_ctx.ig.ensure_logged_in(acc)
+        cat = body.category_id or "2347428775505624"  # categoria genérica padrão
+        if body.account_type == "business":
+            cl.account_convert_to_business(category_id=cat)
+            label = "Comercial (Business)"
+        elif body.account_type == "creator":
+            cl.account_convert_to_creator(category_id=cat)
+            label = "Criador de Conteúdo"
+        else:
+            # Voltar para pessoal: o aiograpi expõe via account_convert (to_account_type=1)
+            try:
+                cl.account_convert_to_professional(to_account_type=1)
+            except Exception:
+                raise RuntimeError("Reversão para conta pessoal não suportada pela API. Faça pelo app do Instagram.")
+            label = "Pessoal"
+        app_ctx.ig.save_session(acc.id, cl)
+        return {"ok": True, "account_type": body.account_type, "message": f"Conta convertida para {label} com sucesso!"}
+    except Exception as e:
+        status, detail = instagram_service.map_login_error(e)
+        raise HTTPException(400, detail=f"Falha ao alterar tipo de conta: {detail}")
+
+
+@router.post("/{account_id}/privacy", response_model=dict)
+def change_privacy(account_id: int, body: PrivacyChangeIn,
+                   user: models.User = Depends(get_current_user),
+                   db: Session = Depends(get_db)):
+    """Define a conta como privada ou pública."""
+    acc = _get_owned(db, account_id, user.id)
+
+    if acc.simulate:
+        acc.is_private = body.private
+        db.commit()
+        return {"ok": True, "private": body.private, "message": "Privacidade alterada (simulação)."}
+
+    try:
+        cl = app_ctx.ig.ensure_logged_in(acc)
+        if body.private:
+            cl.account_set_private()
+        else:
+            cl.account_set_public()
+        acc.is_private = body.private
+        db.commit()
+        app_ctx.ig.save_session(acc.id, cl)
+        estado = "privada" if body.private else "pública"
+        return {"ok": True, "private": body.private, "message": f"Conta definida como {estado} com sucesso!"}
+    except Exception as e:
+        status, detail = instagram_service.map_login_error(e)
+        raise HTTPException(400, detail=f"Falha ao alterar privacidade: {detail}")
 
 
 @router.post("/{account_id}/profile/picture", response_model=dict)

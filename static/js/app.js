@@ -479,6 +479,140 @@ function render() {
 /* ==========================================================================
    MODAL GLOBAL: PUBLICAR AGORA (CONTA ÚNICA OU MULTI-CONTAS COM VARIANTES)
    ========================================================================== */
+/* ==========================================================================
+   MODAL: EDITAR PERFIL DO INSTAGRAM (via aiograpi) — nome, bio, @, link,
+   foto, tipo de conta (pessoal/business/criador) e privacidade.
+   ========================================================================== */
+async function openEditIgProfileModal(acct) {
+  const id = acct.id;
+  let prof = {};
+  try { prof = await api(`/api/accounts/${id}/profile`); } catch {}
+
+  const avatarUrl = `/api/accounts/${id}/profile-picture?t=${Date.now()}`;
+
+  openModal(`
+    <h3>${ICONS.user} Editar Perfil do Instagram — @${esc(acct.ig_username)}</h3>
+    <div class="mbody" style="max-height:66vh;overflow-y:auto">
+      <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:12px;padding:8px 10px;background:var(--bg-card-sub);border-radius:var(--radius-sm)">
+        As alterações são enviadas de verdade ao Instagram via sessão conectada. Requer conta conectada (não simulação) e internet/proxy ativos.
+      </div>
+
+      <!-- Foto -->
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
+        <div style="width:64px;height:64px;border-radius:50%;overflow:hidden;background:var(--bg-card-sub);flex-shrink:0">
+          <img src="${avatarUrl}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'">
+        </div>
+        <div>
+          <input type="file" id="ig-avatar-file" accept="image/*" style="display:none">
+          <button class="btn sm" id="ig-btn-avatar">${ICONS.upload} Trocar foto de perfil</button>
+        </div>
+      </div>
+
+      <!-- Nome, bio, link -->
+      <label class="field"><span>Nome de exibição</span><input class="input" id="ig-fullname" value="${esc(prof.full_name || acct.name || "")}" maxlength="150"></label>
+      <label class="field" style="margin-top:8px"><span>Biografia</span><textarea class="input" id="ig-bio" rows="3" maxlength="150" style="resize:vertical">${esc(prof.biography || "")}</textarea></label>
+      <label class="field" style="margin-top:8px"><span>Link externo (site)</span><input class="input" id="ig-url" value="${esc(prof.external_url || "")}" placeholder="https://..." maxlength="255"></label>
+      <div style="margin-top:10px"><button class="btn primary sm" id="ig-btn-save-basic">${ICONS.check} Salvar nome, bio e link</button></div>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+
+      <!-- Username -->
+      <div class="section-title" style="margin-top:0;font-size:13px">${ICONS.zap} Nome de usuário (@)</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <label class="field" style="flex:1;min-width:180px"><span>Novo @</span><input class="input" id="ig-username" value="${esc(acct.ig_username)}" maxlength="30"></label>
+        <button class="btn sm ghost" id="ig-btn-check-username">Verificar disponibilidade</button>
+        <button class="btn sm" id="ig-btn-save-username">Trocar @</button>
+      </div>
+      <div id="ig-username-status" style="font-size:11px;color:var(--text-muted);margin-top:6px">O Instagram limita a troca de @ a cada ~14 dias.</div>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+
+      <!-- Tipo de conta -->
+      <div class="section-title" style="margin-top:0;font-size:13px">${ICONS.shield} Tipo de Conta</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <label class="field" style="flex:1;min-width:160px"><span>Categoria</span>
+          <select class="input" id="ig-acctype">
+            <option value="personal">Pessoal</option>
+            <option value="creator">Criador de Conteúdo</option>
+            <option value="business">Comercial (Business)</option>
+          </select>
+        </label>
+        <button class="btn sm" id="ig-btn-save-type">Aplicar</button>
+      </div>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+
+      <!-- Privacidade -->
+      <div class="section-title" style="margin-top:0;font-size:13px">${ICONS.eye} Privacidade</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn sm ${prof.is_private ? "" : "ghost"}" id="ig-btn-private">${ICONS.shield} Tornar Privada</button>
+        <button class="btn sm ${prof.is_private ? "ghost" : ""}" id="ig-btn-public">${ICONS.eye} Tornar Pública</button>
+      </div>
+    </div>
+  `, [{ label: "Fechar", cls: "primary", onClick: () => { refreshAccountsList(); } }]);
+
+  // Foto
+  const avFile = $("#ig-avatar-file");
+  $("#ig-btn-avatar").onclick = () => avFile.click();
+  avFile.onchange = async () => {
+    if (!avFile.files || !avFile.files.length) return;
+    const fd = new FormData(); fd.append("file", avFile.files[0]);
+    try { await api(`/api/accounts/${id}/profile/picture`, { method: "POST", form: fd }); toast("Foto enviada ao Instagram!", "ok"); }
+    catch (err) { toast(err.message, "err"); }
+  };
+
+  // Nome/bio/link
+  $("#ig-btn-save-basic").onclick = async () => {
+    const btn = $("#ig-btn-save-basic"); btn.disabled = true;
+    try {
+      const r = await api(`/api/accounts/${id}/profile/edit`, { method: "POST", body: {
+        full_name: $("#ig-fullname").value, biography: $("#ig-bio").value, external_url: $("#ig-url").value,
+      }});
+      toast(r.message || "Perfil atualizado!", r.ok === false ? "err" : "ok");
+    } catch (err) { toast(err.message, "err"); } finally { btn.disabled = false; }
+  };
+
+  // Verificar username
+  $("#ig-btn-check-username").onclick = async () => {
+    const uname = $("#ig-username").value.trim().replace(/^@/, "");
+    const st = $("#ig-username-status");
+    st.textContent = "Verificando...";
+    try {
+      const r = await api(`/api/accounts/${id}/check-username?username=${encodeURIComponent(uname)}`);
+      st.textContent = r.message;
+      st.style.color = r.available ? "var(--green)" : "var(--red)";
+    } catch (err) { st.textContent = err.message; st.style.color = "var(--red)"; }
+  };
+
+  // Trocar username
+  $("#ig-btn-save-username").onclick = async () => {
+    const uname = $("#ig-username").value.trim().replace(/^@/, "");
+    const ok = await confirmDialog(`Trocar o @ para @${uname}? O Instagram limita trocas a cada ~14 dias.`, "Trocar @", "primary");
+    if (!ok) return;
+    try { const r = await api(`/api/accounts/${id}/change-username`, { method: "POST", body: { new_username: uname } }); toast(r.message, "ok"); }
+    catch (err) { toast(err.message, "err"); }
+  };
+
+  // Tipo de conta
+  $("#ig-btn-save-type").onclick = async () => {
+    const t = $("#ig-acctype").value;
+    const ok = await confirmDialog(`Converter esta conta para "${$("#ig-acctype").selectedOptions[0].text}"?`, "Converter", "primary");
+    if (!ok) return;
+    try { const r = await api(`/api/accounts/${id}/account-type`, { method: "POST", body: { account_type: t } }); toast(r.message, "ok"); }
+    catch (err) { toast(err.message, "err"); }
+  };
+
+  // Privacidade
+  $("#ig-btn-private").onclick = async () => {
+    try { const r = await api(`/api/accounts/${id}/privacy`, { method: "POST", body: { private: true } }); toast(r.message, "ok"); }
+    catch (err) { toast(err.message, "err"); }
+  };
+  $("#ig-btn-public").onclick = async () => {
+    try { const r = await api(`/api/accounts/${id}/privacy`, { method: "POST", body: { private: false } }); toast(r.message, "ok"); }
+    catch (err) { toast(err.message, "err"); }
+  };
+}
+
 async function openDirectPostModal() {
   let [accounts, medias] = [[], []];
   try {
@@ -1046,6 +1180,7 @@ function acctCard(a) {
 
     <div class="acct-actions">
       <button class="btn sm" data-act="check-conn" data-id="${a.id}">${ICONS.zap} Testar</button>
+      <button class="btn sm" data-act="edit-ig" data-id="${a.id}">${ICONS.user} Editar Perfil IG</button>
       <button class="btn sm" data-act="view-fp" data-id="${a.id}">${ICONS.smartphone} Aparelho</button>
       <button class="btn sm" data-act="retry" data-id="${a.id}">${ICONS.refresh} Reconectar</button>
       <button class="btn sm danger" data-act="del" data-id="${a.id}">${ICONS.trash}</button>
@@ -1067,6 +1202,8 @@ function bindAccountActions(accounts) {
           await api(`/api/accounts/${id}`, { method: "DELETE" });
           toast("Conta excluída.", "ok");
           refreshAccountsList();
+        } else if (act === "edit-ig") {
+          openEditIgProfileModal(acct);
         } else if (act === "check-conn") {
           toast("Validando conexão...", "");
           const r = await api(`/api/accounts/${id}/check-connection`, { method: "POST" });

@@ -207,6 +207,19 @@ class ProfileEditIn(BaseModel):
     external_url: Optional[str] = Field(None, max_length=255)
 
 
+class UsernameChangeIn(BaseModel):
+    new_username: str = Field(min_length=1, max_length=30)
+
+
+class AccountTypeChangeIn(BaseModel):
+    account_type: str = Field(pattern="^(personal|business|creator)$")
+    category_id: Optional[str] = Field(None, max_length=40)
+
+
+class PrivacyChangeIn(BaseModel):
+    private: bool
+
+
 class AccountProfileOut(BaseModel):
     account_id: int
     username: str
