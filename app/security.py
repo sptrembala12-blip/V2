@@ -116,6 +116,11 @@ def _get_fernet() -> Fernet:
     return _fernet
 
 
+def hash_recovery_code(code: str) -> str:
+    """Hash simples e determinístico para códigos de recuperação 2FA."""
+    return hashlib.sha256((code + config.SECRET_KEY).encode()).hexdigest()
+
+
 def encrypt_secret(value: str) -> str:
     return _get_fernet().encrypt(value.encode()).decode()
 

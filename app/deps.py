@@ -62,4 +62,21 @@ def get_current_user(
     user = db.get(models.User, row.user_id)
     if user is None:
         raise HTTPException(401, detail="Usuário não encontrado.")
+
+    # Atualiza metadados da sessão (para a lista de dispositivos ativos).
+    # Grava no máximo 1x/min para não sobrecarregar o banco no polling.
+    try:
+        now = datetime.now(timezone.utc)
+        last = row.last_seen_at
+        if last is not None and last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        if last is None or (now - last) > timedelta(seconds=60):
+            row.last_seen_at = now
+            fwd = request.headers.get("CF-Connecting-IP") or request.headers.get("X-Forwarded-For")
+            row.ip_address = (fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else None))
+            row.user_agent = request.headers.get("User-Agent", "")[:400]
+            db.commit()
+    except Exception:
+        db.rollback()
+
     return user

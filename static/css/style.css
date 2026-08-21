@@ -1121,6 +1121,38 @@ tr:hover td {
 }
 
 /* ---------------- TELA DE CONFIGURAÇÕES ---------------- */
+.settings-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 2px;
+}
+.settings-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  border-radius: 8px 8px 0 0;
+  transition: all .15s ease;
+  white-space: nowrap;
+}
+.settings-tab svg { width: 15px; height: 15px; }
+.settings-tab:hover { color: var(--text-primary); background: var(--bg-card-sub); }
+.settings-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: var(--accent-surface, var(--bg-card-sub));
+}
+
 .settings-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));

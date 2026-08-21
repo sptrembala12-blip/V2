@@ -62,6 +62,55 @@ class ThemePreferenceIn(BaseModel):
     theme: str = Field("auto", pattern="^(claro|escuro|auto|light|dark)$")
 
 
+class ProfileUpdateIn(BaseModel):
+    name: Optional[str] = Field(None, max_length=255)
+    phone: Optional[str] = Field(None, max_length=40)
+    company: Optional[str] = Field(None, max_length=120)
+    locale_preference: Optional[str] = Field(None, max_length=10)
+
+
+class TwoFactorEnableConfirmIn(BaseModel):
+    code: str = Field(min_length=6, max_length=6)
+
+
+class TwoFactorDisableIn(BaseModel):
+    password: str = Field(min_length=1, max_length=128)
+    code: Optional[str] = Field(None, max_length=10)
+
+
+class ProfileOut(BaseModel):
+    id: int
+    email: str
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    company: Optional[str] = None
+    locale_preference: str = "pt-BR"
+    avatar_url: Optional[str] = None
+    is_verified: bool = False
+    two_factor_enabled: bool = False
+    theme_preference: str = "auto"
+    created_at: datetime
+    password_changed_at: Optional[datetime] = None
+
+
+class SessionOut(BaseModel):
+    id: str          # token (mascarado no retorno)
+    current: bool
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    created_at: datetime
+    last_seen_at: Optional[datetime] = None
+
+
+class LoginHistoryOut(BaseModel):
+    id: int
+    event: str
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    detail: Optional[str] = None
+    created_at: datetime
+
+
 class UserSettingsOut(BaseModel):
     id: int
     email: str

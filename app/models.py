@@ -29,8 +29,16 @@ class User(Base):
     reset_password_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
     two_factor_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     two_factor_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    two_factor_pending_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    two_factor_recovery: Mapped[str | None] = mapped_column(Text, nullable=True)  # códigos de recuperação (hash, JSON)
     theme_preference: Mapped[str] = mapped_column(String(20), default="auto")
+    # Perfil
+    phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    company: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    avatar_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    locale_preference: Mapped[str] = mapped_column(String(10), default="pt-BR")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    password_changed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class AuthToken(Base):
@@ -40,6 +48,23 @@ class AuthToken(Base):
 
     token: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class LoginHistory(Base):
+    """Histórico de eventos de acesso do usuário (auditoria de segurança)."""
+
+    __tablename__ = "login_history"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    event: Mapped[str] = mapped_column(String(40))  # login | login_failed | logout | 2fa_enabled | password_changed | email_changed
+    ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 

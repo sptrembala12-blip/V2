@@ -169,7 +169,16 @@ def login(body: AuthIn, request: Request, response: Response, db: Session = Depe
     rate_limiter.clear_login_attempts(email, ip)
 
     token = security.create_token()
-    db.add(models.AuthToken(token=token, user_id=user.id))
+    now = models.utcnow()
+    db.add(models.AuthToken(
+        token=token, user_id=user.id, last_seen_at=now, ip_address=ip,
+        user_agent=(request.headers.get("User-Agent", "") or "")[:400],
+    ))
+    # Registra o evento de login no histórico de segurança.
+    db.add(models.LoginHistory(
+        user_id=user.id, event="login", ip_address=ip,
+        user_agent=(request.headers.get("User-Agent", "") or "")[:400],
+    ))
     db.commit()
 
     _set_session_cookie(response, token)

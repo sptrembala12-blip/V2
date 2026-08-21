@@ -17,7 +17,7 @@ from .database import SessionLocal, init_db
 from .instagram_service import IGManager
 from .main_ctx import init as init_ctx
 from .posting import PostingService
-from .routers import accounts, auth, media, schedules, stats, temp_email, warmup
+from .routers import accounts, auth, media, schedules, security, stats, temp_email, warmup
 from .scheduler import SchedulerManager
 from .warmup import WarmupManager
 
@@ -99,6 +99,7 @@ app.include_router(schedules.router)
 app.include_router(stats.router)
 app.include_router(warmup.router)
 app.include_router(temp_email.router)
+app.include_router(security.router)
 
 
 @app.api_route("/api/health", methods=["GET", "HEAD"], tags=["sistema"])

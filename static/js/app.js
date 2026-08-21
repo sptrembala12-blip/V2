@@ -70,6 +70,7 @@ const state = {
   selectedMediaAccountId: null,
   pollTimer: null,
   uploading: false,
+  settingsTab: "perfil",
 };
 
 // Alerta o usuário se ele tentar recarregar/fechar a aba durante um upload ativo.
@@ -440,7 +441,7 @@ const VIEWS = {
   aquecimento: { title: "Aquecer Conta", sub: "Maturação automática anti-queda com IA e retenção humana", poll: 2500 },
   gerador_email: { title: "Gerador de E-mail Temporário", sub: "Caixa de entrada descartável que captura códigos de verificação automaticamente", poll: 3000 },
   publicacoes: { title: "Histórico de Posts", sub: "Log detalhado de execuções com hashes únicos", poll: 3500 },
-  configuracoes: { title: "Configurações", sub: "Segurança, troca de senha por e-mail e preferências", poll: 10000 },
+  configuracoes: { title: "Configurações", sub: "Perfil, segurança, sessões, aparência e sistema", poll: 0 },
 };
 
 function render() {
@@ -2216,15 +2217,374 @@ async function refreshLogsList() {
    ========================================================================== */
 async function initConfiguracoes() {
   const c = $("#content");
-  let settings = null;
-  let sysinfo = null;
-  try { settings = await api("/api/auth/settings"); } catch (err) { return; }
-  try { sysinfo = await api("/api/auth/system-info"); } catch { sysinfo = null; }
+  if (!state.settingsTab) state.settingsTab = "perfil";
 
+  c.innerHTML = `
+    <div class="settings-tabs" id="settings-tabs">
+      <button class="settings-tab" data-tab="perfil">${ICONS.user} Perfil</button>
+      <button class="settings-tab" data-tab="seguranca">${ICONS.shield} Segurança</button>
+      <button class="settings-tab" data-tab="sessoes">${ICONS.smartphone} Sessões & Acessos</button>
+      <button class="settings-tab" data-tab="aparencia">${ICONS.sun} Aparência</button>
+      <button class="settings-tab" data-tab="sistema">${ICONS.settings} Sistema</button>
+    </div>
+    <div id="settings-panel"></div>
+  `;
+
+  const tabsEl = $("#settings-tabs");
+  const setActive = () => $$(".settings-tab", tabsEl).forEach((b) => b.classList.toggle("active", b.dataset.tab === state.settingsTab));
+  $$(".settings-tab", tabsEl).forEach((b) => {
+    b.onclick = () => { state.settingsTab = b.dataset.tab; setActive(); renderSettingsTab(); };
+  });
+  setActive();
+  renderSettingsTab();
+}
+
+async function renderSettingsTab() {
+  const panel = $("#settings-panel");
+  if (!panel) return;
+  panel.innerHTML = `<div class="empty"><div class="empty-ico">${ICONS.refresh}</div>Carregando...</div>`;
+  const tab = state.settingsTab;
+  try {
+    if (tab === "perfil") return renderSettingsPerfil(panel);
+    if (tab === "seguranca") return renderSettingsSeguranca(panel);
+    if (tab === "sessoes") return renderSettingsSessoes(panel);
+    if (tab === "aparencia") return renderSettingsAparencia(panel);
+    if (tab === "sistema") return renderSettingsSistema(panel);
+  } catch (err) {
+    panel.innerHTML = `<div class="empty"><div class="empty-ico">${ICONS.alert}</div>${esc(err.message || "Erro ao carregar.")}</div>`;
+  }
+}
+
+/* ---------------- Aba: Perfil ---------------- */
+async function renderSettingsPerfil(panel) {
+  const p = await api("/api/security/profile");
+  const avatarUrl = p.avatar_url ? `${p.avatar_url}?t=${Date.now()}` : null;
+  const initial = (p.name || p.email || "U")[0].toUpperCase();
+
+  panel.innerHTML = `
+    <div class="settings-grid">
+      <div class="card">
+        <div class="section-title" style="margin-top:0">${ICONS.user} Foto de Perfil</div>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div id="avatar-preview" style="width:84px;height:84px;border-radius:50%;overflow:hidden;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:32px;font-weight:800;flex-shrink:0">
+            ${avatarUrl ? `<img src="${avatarUrl}" style="width:100%;height:100%;object-fit:cover">` : initial}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <input type="file" id="avatar-file" accept="image/*" style="display:none">
+            <button class="btn sm" id="btn-upload-avatar">${ICONS.upload} Enviar foto</button>
+            ${p.avatar_url ? `<button class="btn sm ghost" id="btn-remove-avatar">${ICONS.trash} Remover</button>` : ""}
+            <div style="font-size:10.5px;color:var(--text-muted)">JPG/PNG até 8 MB. Metadados removidos.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="grid-column:1 / -1">
+        <div class="section-title" style="margin-top:0">${ICONS.user} Dados Pessoais</div>
+        <div class="row">
+          <label class="field"><span>Nome completo</span><input class="input" id="pf-name" value="${esc(p.name || "")}" placeholder="Seu nome"></label>
+          <label class="field"><span>Telefone</span><input class="input" id="pf-phone" value="${esc(p.phone || "")}" placeholder="(11) 90000-0000"></label>
+        </div>
+        <div class="row">
+          <label class="field"><span>Empresa / Marca</span><input class="input" id="pf-company" value="${esc(p.company || "")}" placeholder="Opcional"></label>
+          <label class="field"><span>Idioma</span>
+            <select class="input" id="pf-locale">
+              <option value="pt-BR" ${p.locale_preference === "pt-BR" ? "selected" : ""}>Português (Brasil)</option>
+              <option value="en-US" ${p.locale_preference === "en-US" ? "selected" : ""}>English (US)</option>
+              <option value="es-ES" ${p.locale_preference === "es-ES" ? "selected" : ""}>Español</option>
+            </select>
+          </label>
+        </div>
+        <div class="cfg-kv"><span>Membro desde</span><strong>${fmtDate(p.created_at)}</strong></div>
+        <div style="margin-top:12px"><button class="btn primary sm" id="btn-save-profile">${ICONS.check} Salvar Alterações</button></div>
+      </div>
+    </div>
+  `;
+
+  const fileInput = $("#avatar-file");
+  $("#btn-upload-avatar").onclick = () => fileInput.click();
+  fileInput.onchange = async () => {
+    if (!fileInput.files || !fileInput.files.length) return;
+    const fd = new FormData(); fd.append("file", fileInput.files[0]);
+    try { await api("/api/security/avatar", { method: "POST", form: fd }); toast("Foto atualizada!", "ok"); renderSettingsTab(); }
+    catch (err) { toast(err.message, "err"); }
+  };
+  const btnRemove = $("#btn-remove-avatar");
+  if (btnRemove) btnRemove.onclick = async () => {
+    try { await api("/api/security/avatar", { method: "DELETE" }); toast("Foto removida.", "ok"); renderSettingsTab(); }
+    catch (err) { toast(err.message, "err"); }
+  };
+
+  $("#btn-save-profile").onclick = async () => {
+    const body = {
+      name: $("#pf-name").value.trim(),
+      phone: $("#pf-phone").value.trim(),
+      company: $("#pf-company").value.trim(),
+      locale_preference: $("#pf-locale").value,
+    };
+    const btn = $("#btn-save-profile"); btn.disabled = true;
+    try {
+      await api("/api/security/profile", { method: "POST", body });
+      state.name = body.name; store.set("instaflow_name", body.name);
+      toast("Perfil salvo com sucesso!", "ok");
+    } catch (err) { toast(err.message, "err"); } finally { btn.disabled = false; }
+  };
+}
+
+/* ---------------- Aba: Segurança ---------------- */
+async function renderSettingsSeguranca(panel) {
+  const p = await api("/api/security/profile");
+  const twoFAOn = p.two_factor_enabled;
+
+  panel.innerHTML = `
+    <div class="settings-grid">
+      <!-- Trocar Senha -->
+      <div class="card">
+        <div class="section-title" style="margin-top:0">${ICONS.key} Trocar Senha</div>
+        <label class="field"><span>Senha atual</span><input class="input" type="password" id="sec-cur-pwd" placeholder="••••••••"></label>
+        <label class="field" style="margin-top:8px"><span>Nova senha</span><input class="input" type="password" id="sec-new-pwd" placeholder="mín. 8, letra + número"></label>
+        <label class="field" style="margin-top:8px"><span>Confirmar nova senha</span><input class="input" type="password" id="sec-new-pwd2" placeholder="repita a nova senha"></label>
+        <div style="margin-top:12px"><button class="btn primary sm" id="btn-change-pwd">${ICONS.check} Alterar Senha</button></div>
+        <div style="font-size:10.5px;color:var(--text-muted);margin-top:8px">Última troca: ${p.password_changed_at ? fmtDate(p.password_changed_at) : "—"}</div>
+      </div>
+
+      <!-- Trocar E-mail -->
+      <div class="card">
+        <div class="section-title" style="margin-top:0">${ICONS.mail} E-mail de Acesso</div>
+        <div class="cfg-kv"><span>Atual</span><strong>${esc(p.email)}</strong></div>
+        <label class="field" style="margin-top:8px"><span>Novo e-mail</span><input class="input" id="sec-new-email" placeholder="novo@email.com"></label>
+        <label class="field" style="margin-top:8px"><span>Senha (confirmação)</span><input class="input" type="password" id="sec-email-pwd" placeholder="sua senha"></label>
+        <div style="margin-top:12px"><button class="btn primary sm" id="btn-change-email">${ICONS.check} Atualizar E-mail</button></div>
+      </div>
+
+      <!-- 2FA -->
+      <div class="card" style="grid-column:1 / -1">
+        <div class="section-title" style="margin-top:0">${ICONS.shield} Verificação em Duas Etapas (2FA)</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          ${twoFAOn
+            ? `<span class="badge green"><span class="dot"></span>Ativada</span>`
+            : `<span class="badge amber"><span class="dot"></span>Desativada</span>`}
+          <span style="font-size:12px;color:var(--text-muted)">Protege sua conta exigindo um código do app autenticador (Google Authenticator, Authy).</span>
+        </div>
+        <div id="twofa-area"></div>
+      </div>
+    </div>
+  `;
+
+  // Trocar senha
+  $("#btn-change-pwd").onclick = async () => {
+    const cur = $("#sec-cur-pwd").value, np = $("#sec-new-pwd").value, np2 = $("#sec-new-pwd2").value;
+    if (np !== np2) { toast("As senhas não coincidem.", "err"); return; }
+    const btn = $("#btn-change-pwd"); btn.disabled = true;
+    try {
+      await api("/api/security/change-password", { method: "POST", body: { current_password: cur, new_password: np } });
+      toast("Senha alterada com sucesso!", "ok");
+      $("#sec-cur-pwd").value = $("#sec-new-pwd").value = $("#sec-new-pwd2").value = "";
+    } catch (err) { toast(err.message, "err"); } finally { btn.disabled = false; }
+  };
+
+  // Trocar e-mail
+  $("#btn-change-email").onclick = async () => {
+    const btn = $("#btn-change-email"); btn.disabled = true;
+    try {
+      const r = await api("/api/security/change-email", { method: "POST", body: { new_email: $("#sec-new-email").value.trim(), password: $("#sec-email-pwd").value } });
+      state.email = r.email; store.set("instaflow_email", r.email);
+      toast("E-mail atualizado!", "ok"); renderSettingsTab();
+    } catch (err) { toast(err.message, "err"); } finally { btn.disabled = false; }
+  };
+
+  renderTwoFAArea(twoFAOn);
+}
+
+function renderTwoFAArea(isOn) {
+  const area = $("#twofa-area");
+  if (!area) return;
+  if (isOn) {
+    area.innerHTML = `
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn sm ghost" id="btn-2fa-recovery">${ICONS.refresh} Gerar novos códigos de recuperação</button>
+        <button class="btn sm danger" id="btn-2fa-disable">${ICONS.trash} Desativar 2FA</button>
+      </div>`;
+    $("#btn-2fa-disable").onclick = async () => {
+      const pwd = prompt("Confirme sua senha para desativar o 2FA:");
+      if (!pwd) return;
+      try { await api("/api/security/2fa/disable", { method: "POST", body: { password: pwd } }); toast("2FA desativado.", "ok"); renderSettingsTab(); }
+      catch (err) { toast(err.message, "err"); }
+    };
+    $("#btn-2fa-recovery").onclick = async () => {
+      const pwd = prompt("Confirme sua senha para gerar novos códigos:");
+      if (!pwd) return;
+      try { const r = await api("/api/security/2fa/recovery-codes", { method: "POST", body: { password: pwd } }); showRecoveryCodes(r.recovery_codes); }
+      catch (err) { toast(err.message, "err"); }
+    };
+  } else {
+    area.innerHTML = `<button class="btn primary sm" id="btn-2fa-setup">${ICONS.shield} Ativar 2FA</button>`;
+    $("#btn-2fa-setup").onclick = async () => {
+      try {
+        const s = await api("/api/security/2fa/setup", { method: "POST" });
+        openModal(`
+          <h3>${ICONS.shield} Ativar Verificação em Duas Etapas</h3>
+          <div class="mbody">
+            <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:10px">1. Escaneie o QR Code no seu app autenticador (Google Authenticator, Authy, etc.):</p>
+            <div style="text-align:center;margin-bottom:10px"><img src="${s.qr_code}" style="width:180px;height:180px;border-radius:8px;background:#fff;padding:6px"></div>
+            <p style="font-size:11px;color:var(--text-muted);margin-bottom:10px">Ou insira manualmente a chave: <code style="user-select:all;background:var(--bg-card-sub);padding:2px 6px;border-radius:4px">${s.secret}</code></p>
+            <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:6px">2. Digite o código de 6 dígitos gerado pelo app:</p>
+            <input class="input" id="twofa-confirm-code" placeholder="000000" maxlength="6" style="font-size:18px;letter-spacing:6px;text-align:center">
+          </div>
+        `, [
+          { label: "Cancelar", cls: "ghost", onClick: () => {} },
+          { label: "Confirmar e Ativar", cls: "primary", onClick: async () => {
+              const code = ($("#twofa-confirm-code")?.value || "").trim();
+              try { const r = await api("/api/security/2fa/enable", { method: "POST", body: { code } }); toast("2FA ativado!", "ok"); showRecoveryCodes(r.recovery_codes); renderSettingsTab(); }
+              catch (err) { toast(err.message, "err"); return false; }
+            } },
+        ]);
+      } catch (err) { toast(err.message, "err"); }
+    };
+  }
+}
+
+function showRecoveryCodes(codes) {
+  openModal(`
+    <h3>${ICONS.key} Códigos de Recuperação</h3>
+    <div class="mbody">
+      <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:10px">Guarde estes códigos em local seguro. Cada um funciona <strong>uma única vez</strong> caso você perca acesso ao app autenticador.</p>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;font-family:ui-monospace,monospace;font-size:14px;background:var(--bg-card-sub);padding:14px;border-radius:8px">
+        ${codes.map((c) => `<div style="letter-spacing:1px">${esc(c)}</div>`).join("")}
+      </div>
+      <button class="btn sm" id="btn-copy-recovery" style="margin-top:12px">${ICONS.copy} Copiar todos</button>
+    </div>
+  `, [{ label: "Guardei os códigos", cls: "primary", onClick: () => {} }]);
+  setTimeout(() => {
+    const b = $("#btn-copy-recovery");
+    if (b) b.onclick = () => { navigator.clipboard.writeText(codes.join("\n")); toast("Códigos copiados!", "ok"); };
+  }, 100);
+}
+
+/* ---------------- Aba: Sessões & Acessos ---------------- */
+async function renderSettingsSessoes(panel) {
+  const [sessions, history] = await Promise.all([
+    api("/api/security/sessions"),
+    api("/api/security/login-history").catch(() => []),
+  ]);
+
+  const eventLabel = {
+    login: "Login", login_failed: "Tentativa falha", logout: "Logout",
+    "2fa_enabled": "2FA ativado", "2fa_disabled": "2FA desativado",
+    password_changed: "Senha alterada", email_changed: "E-mail alterado",
+  };
+
+  panel.innerHTML = `
+    <div class="settings-grid">
+      <div class="card" style="grid-column:1 / -1">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <div class="section-title" style="margin:0">${ICONS.smartphone} Dispositivos & Sessões Ativas</div>
+          <button class="btn sm ghost" id="btn-revoke-others">${ICONS.logout} Encerrar outras sessões</button>
+        </div>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
+          ${sessions.map((s) => `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;background:var(--bg-card-sub);border:1px solid var(--border);border-radius:var(--radius-sm)">
+              <div style="min-width:0">
+                <div style="font-size:12.5px;font-weight:700;color:var(--text-primary);display:flex;align-items:center;gap:8px">
+                  ${prettyUA(s.user_agent)} ${s.current ? `<span class="badge green sm">Este dispositivo</span>` : ""}
+                </div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:2px">
+                  IP: ${esc(s.ip_address || "—")} · Ativo: ${s.last_seen_at ? fmtDate(s.last_seen_at) : fmtDate(s.created_at)}
+                </div>
+              </div>
+              ${s.current ? "" : `<button class="btn sm danger" data-revoke="${esc(s.id)}">${ICONS.trash} Revogar</button>`}
+            </div>
+          `).join("")}
+        </div>
+      </div>
+
+      <div class="card" style="grid-column:1 / -1">
+        <div class="section-title" style="margin-top:0">${ICONS.clock} Histórico de Acessos & Segurança</div>
+        ${history.length ? `
+          <div class="table-wrap"><table>
+            <tr><th>Evento</th><th>IP</th><th>Dispositivo</th><th>Detalhe</th><th style="text-align:right">Quando</th></tr>
+            ${history.map((h) => `
+              <tr>
+                <td><strong>${esc(eventLabel[h.event] || h.event)}</strong></td>
+                <td style="font-size:11px;color:var(--text-muted)">${esc(h.ip_address || "—")}</td>
+                <td style="font-size:11px;color:var(--text-muted)">${prettyUA(h.user_agent)}</td>
+                <td style="font-size:11px;color:var(--text-muted)">${esc(h.detail || "—")}</td>
+                <td style="text-align:right;font-size:11px;color:var(--text-muted)">${fmtDate(h.created_at)}</td>
+              </tr>
+            `).join("")}
+          </table></div>
+        ` : `<div style="font-size:12px;color:var(--text-muted)">Nenhum evento registrado ainda.</div>`}
+      </div>
+    </div>
+  `;
+
+  $("#btn-revoke-others").onclick = async () => {
+    const ok = await confirmDialog("Encerrar todas as outras sessões? Os demais dispositivos precisarão entrar novamente.", "Encerrar outras", "danger");
+    if (!ok) return;
+    try { const r = await api("/api/security/sessions/revoke-others", { method: "POST" }); toast(r.message || "Sessões encerradas.", "ok"); renderSettingsTab(); }
+    catch (err) { toast(err.message, "err"); }
+  };
+  $$("[data-revoke]", panel).forEach((b) => {
+    b.onclick = async () => {
+      try { await api(`/api/security/sessions/${encodeURIComponent(b.dataset.revoke)}`, { method: "DELETE" }); toast("Sessão revogada.", "ok"); renderSettingsTab(); }
+      catch (err) { toast(err.message, "err"); }
+    };
+  });
+}
+
+function prettyUA(ua) {
+  if (!ua) return "Dispositivo desconhecido";
+  ua = String(ua);
+  let os = "Sistema";
+  if (/Windows/i.test(ua)) os = "Windows";
+  else if (/Android/i.test(ua)) os = "Android";
+  else if (/iPhone|iPad|iOS/i.test(ua)) os = "iOS";
+  else if (/Mac OS X|Macintosh/i.test(ua)) os = "macOS";
+  else if (/Linux/i.test(ua)) os = "Linux";
+  let br = "Navegador";
+  if (/Edg/i.test(ua)) br = "Edge";
+  else if (/Chrome/i.test(ua)) br = "Chrome";
+  else if (/Firefox/i.test(ua)) br = "Firefox";
+  else if (/Safari/i.test(ua)) br = "Safari";
+  return `${br} · ${os}`;
+}
+
+/* ---------------- Aba: Aparência ---------------- */
+async function renderSettingsAparencia(panel) {
   const currentTheme = state.theme || "auto";
+  panel.innerHTML = `
+    <div class="settings-grid">
+      <div class="card" style="grid-column:1 / -1">
+        <div class="section-title" style="margin-top:0">${ICONS.sun} Tema da Interface</div>
+        <div class="theme-options-grid">
+          <div class="theme-option-card ${currentTheme === "claro" ? "active" : ""}" data-theme-choice="claro">
+            <div class="theme-preview-box theme-preview-light"></div><div class="theme-option-name">Claro</div>
+          </div>
+          <div class="theme-option-card ${currentTheme === "escuro" ? "active" : ""}" data-theme-choice="escuro">
+            <div class="theme-preview-box theme-preview-dark"></div><div class="theme-option-name">Escuro</div>
+          </div>
+          <div class="theme-option-card ${currentTheme === "auto" ? "active" : ""}" data-theme-choice="auto">
+            <div class="theme-preview-box theme-preview-auto"></div><div class="theme-option-name">Auto (Ciclo Solar)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  $$(".theme-option-card", panel).forEach((card) => {
+    card.onclick = async () => {
+      const choice = card.dataset.themeChoice;
+      $$(".theme-option-card", panel).forEach((x) => x.classList.toggle("active", x === card));
+      applyTheme(choice);
+      try { await api("/api/auth/theme", { method: "POST", body: { theme: choice } }); toast(`Tema ${choice.toUpperCase()} aplicado!`, "ok"); } catch {}
+    };
+  });
+}
+
+/* ---------------- Aba: Sistema ---------------- */
+async function renderSettingsSistema(panel) {
+  let sysinfo = null;
+  try { sysinfo = await api("/api/auth/system-info"); } catch {}
   const lim = (sysinfo && sysinfo.limits) || {};
   const sec = (sysinfo && sysinfo.security) || {};
-
   const emailBadge = sysinfo && sysinfo.email_configured
     ? `<span class="badge green"><span class="dot"></span>SMTP Ativo</span>`
     : `<span class="badge amber"><span class="dot"></span>Código na tela (SMTP não configurado)</span>`;
@@ -2232,55 +2592,20 @@ async function initConfiguracoes() {
     ? `<span class="badge green"><span class="dot"></span>SECRET_KEY definida</span>`
     : `<span class="badge amber"><span class="dot"></span>SECRET_KEY ausente</span>`;
 
-  c.innerHTML = `
+  panel.innerHTML = `
     <div class="settings-grid">
-      <!-- Aparência -->
       <div class="card">
-        <div class="section-title" style="margin-top:0">${ICONS.sun} Aparência & Tema</div>
-        <div class="theme-options-grid">
-          <div class="theme-option-card ${currentTheme === "claro" ? "active" : ""}" data-theme-choice="claro">
-            <div class="theme-preview-box theme-preview-light"></div>
-            <div class="theme-option-name">Claro</div>
-          </div>
-          <div class="theme-option-card ${currentTheme === "escuro" ? "active" : ""}" data-theme-choice="escuro">
-            <div class="theme-preview-box theme-preview-dark"></div>
-            <div class="theme-option-name">Escuro</div>
-          </div>
-          <div class="theme-option-card ${currentTheme === "auto" ? "active" : ""}" data-theme-choice="auto">
-            <div class="theme-preview-box theme-preview-auto"></div>
-            <div class="theme-option-name">Auto (Ciclo Solar)</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Dados da Conta -->
-      <div class="card">
-        <div class="section-title" style="margin-top:0">${ICONS.user} Dados da Conta</div>
-        <div style="font-size:12.5px;color:var(--text-secondary);margin-bottom:6px">
-          E-mail de Acesso: <strong>${esc(settings.email)}</strong>
-        </div>
-        <div style="font-size:11.5px;color:var(--green);margin-bottom:12px">${ICONS.check} Conta Verificada e Protegida</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn sm ghost" id="btn-export-data">${ICONS.download || ""} Exportar meus dados</button>
-          <button class="btn sm ghost" id="btn-logout-all">${ICONS.shield} Sair de todos os dispositivos</button>
-        </div>
-      </div>
-
-      <!-- Automação & Limites -->
-      <div class="card">
-        <div class="section-title" style="margin-top:0">${ICONS.shield} Automação & Segurança Anti-Ban</div>
+        <div class="section-title" style="margin-top:0">${ICONS.shield} Automação & Anti-Ban</div>
         <div class="cfg-kv"><span>Limite de posts por conta (24h)</span><strong>${lim.max_posts_per_day ?? "—"}</strong></div>
-        <div class="cfg-kv"><span>Tentativas automáticas em falha de rede</span><strong>${lim.network_retry_attempts ?? "—"}</strong></div>
-        <div class="cfg-kv"><span>Workers de postagem paralela</span><strong>${lim.posting_workers ?? "—"}</strong></div>
+        <div class="cfg-kv"><span>Tentativas em falha de rede</span><strong>${lim.network_retry_attempts ?? "—"}</strong></div>
+        <div class="cfg-kv"><span>Workers de postagem</span><strong>${lim.posting_workers ?? "—"}</strong></div>
         <div class="cfg-kv"><span>Upload máximo por arquivo</span><strong>${lim.max_upload_mb ?? "—"} MB</strong></div>
         <div class="cfg-kv"><span>Retenção de logs</span><strong>${lim.log_retention_days ? lim.log_retention_days + " dias" : "Permanente"}</strong></div>
-        <div class="cfg-kv"><span>Health-check de contas</span><strong>${lim.account_healthcheck_minutes ? "a cada " + lim.account_healthcheck_minutes + " min" : "Desligado"}</strong></div>
         <div style="font-size:10.5px;color:var(--text-muted);margin-top:8px">Configurável via variáveis de ambiente (.env).</div>
       </div>
 
-      <!-- Sistema -->
       <div class="card">
-        <div class="section-title" style="margin-top:0">${ICONS.settings} Sistema</div>
+        <div class="section-title" style="margin-top:0">${ICONS.settings} Servidor</div>
         <div class="cfg-kv"><span>Versão</span><strong>v${sysinfo ? sysinfo.version : "—"}</strong></div>
         <div class="cfg-kv"><span>Ambiente</span><strong>${sysinfo ? sysinfo.environment : "—"}</strong></div>
         <div class="cfg-kv"><span>Banco de dados</span><strong>${sysinfo ? sysinfo.database : "—"}</strong></div>
@@ -2289,40 +2614,14 @@ async function initConfiguracoes() {
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">${emailBadge} ${secretBadge}</div>
       </div>
 
-      <!-- Trocar Senha com Verificação por E-mail -->
-      <div class="card" style="grid-column: 1 / -1">
-        <div class="section-title" style="margin-top:0">${ICONS.key} Redefinir Senha de Acesso (Confirmação por E-mail)</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">
-          Para alterar sua senha, clique no botão abaixo para receber um código de segurança de 6 dígitos no seu e-mail cadastrado (<strong>${esc(settings.email)}</strong>). A nova senha precisa ter no mínimo ${sec.min_password_length || 8} caracteres, com letra e número.
-        </div>
-
-        <div style="margin-bottom:12px">
-          <button class="btn sm" id="btn-request-pwd-code">${ICONS.refresh} Solicitar Código no E-mail</button>
-        </div>
-
-        <div class="row">
-          <input class="input" id="cfg-pwd-code-input" placeholder="Código de 6 Dígitos" style="font-size:12px">
-          <input class="input" type="password" id="cfg-new-pwd-input" placeholder="Nova Senha (mín. ${sec.min_password_length || 8}, letra + número)" style="font-size:12px">
-          <button class="btn primary sm" id="btn-submit-new-pwd">${ICONS.check} Confirmar Nova Senha</button>
-        </div>
+      <div class="card" style="grid-column:1 / -1">
+        <div class="section-title" style="margin-top:0">${ICONS.download} Meus Dados</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Exporte todos os seus dados (contas, mídias, agendamentos e logs) em formato JSON.</div>
+        <button class="btn sm ghost" id="btn-export-data">${ICONS.download} Exportar meus dados</button>
       </div>
     </div>
   `;
 
-  // Bind Seletor de Tema
-  $$(".theme-option-card", c).forEach((card) => {
-    card.onclick = async () => {
-      const choice = card.dataset.themeChoice;
-      $$(".theme-option-card", c).forEach((x) => x.classList.toggle("active", x === card));
-      applyTheme(choice);
-      try {
-        await api("/api/auth/theme", { method: "POST", body: { theme: choice } });
-        toast(`Tema ${choice.toUpperCase()} aplicado!`, "ok");
-      } catch {}
-    };
-  });
-
-  // Exportar dados do usuário (download JSON)
   const btnExport = $("#btn-export-data");
   if (btnExport) btnExport.onclick = async () => {
     btnExport.disabled = true;
@@ -2331,86 +2630,10 @@ async function initConfiguracoes() {
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
-      a.download = `instaflow-dados-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
-      toast("Dados exportados com sucesso!", "ok");
-    } catch (err) {
-      toast(err.message || "Falha ao exportar dados.", "err");
-    } finally {
-      btnExport.disabled = false;
-    }
-  };
-
-  // Encerrar sessão em todos os dispositivos
-  const btnLogoutAll = $("#btn-logout-all");
-  if (btnLogoutAll) btnLogoutAll.onclick = async () => {
-    if (!confirm("Encerrar a sessão em TODOS os dispositivos? Você precisará entrar novamente.")) return;
-    btnLogoutAll.disabled = true;
-    try {
-      const res = await api("/api/auth/logout-all", { method: "POST" });
-      toast(res.message || "Sessões encerradas.", "ok");
-      setTimeout(() => logout(true), 800);
-    } catch (err) {
-      toast(err.message || "Falha ao encerrar sessões.", "err");
-      btnLogoutAll.disabled = false;
-    }
-  };
-
-  // Solicitar Código de Senha por E-mail
-  $("#btn-request-pwd-code").onclick = async () => {
-    const btn = $("#btn-request-pwd-code");
-    btn.disabled = true;
-    btn.innerHTML = `${ICONS.refresh} Enviando...`;
-    try {
-      const res = await api("/api/auth/request-password-code", { method: "POST" });
-      $("#cfg-pwd-code-input").value = res.code || "";
-      $("#cfg-pwd-code-input").focus();
-      if (!res.smtp_configured) {
-        toast(`Código de segurança: ${res.code}`, "ok");
-      } else {
-        toast("Código enviado para seu e-mail cadastrado!", "ok");
-      }
-    } catch (err) {
-      toast(err.message, "err");
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = `${ICONS.refresh} Solicitar Código no E-mail`;
-    }
-  };
-
-  // Confirmar Nova Senha com Código
-  $("#btn-submit-new-pwd").onclick = async () => {
-    const code = ($("#cfg-pwd-code-input")?.value || "").trim();
-    const new_password = ($("#cfg-new-pwd-input")?.value || "").trim();
-    if (!code || code.length < 4) {
-      toast("Digite o código de 6 dígitos recebido no e-mail.", "err");
-      $("#cfg-pwd-code-input")?.focus();
-      return;
-    }
-    if (!new_password || new_password.length < 4) {
-      toast("A nova senha deve ter no mínimo 4 caracteres.", "err");
-      $("#cfg-new-pwd-input")?.focus();
-      return;
-    }
-    const btn = $("#btn-submit-new-pwd");
-    btn.disabled = true;
-    btn.innerHTML = `${ICONS.refresh} Atualizando...`;
-    try {
-      const res = await api("/api/auth/change-password-with-code", {
-        method: "POST",
-        body: { code, new_password },
-      });
-      toast(res.message || "Senha atualizada com sucesso!", "ok");
-      $("#cfg-pwd-code-input").value = "";
-      $("#cfg-new-pwd-input").value = "";
-    } catch (err) {
-      toast(err.message, "err");
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = `${ICONS.check} Confirmar Nova Senha`;
-    }
+      a.href = url; a.download = `instaflow-dados-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      toast("Dados exportados!", "ok");
+    } catch (err) { toast(err.message || "Falha ao exportar.", "err"); } finally { btnExport.disabled = false; }
   };
 }
 

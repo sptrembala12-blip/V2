@@ -45,6 +45,25 @@ def init_db() -> None:
                 cursor.execute("ALTER TABLE users ADD COLUMN verification_code TEXT")
             if "reset_password_code" not in cols_usr:
                 cursor.execute("ALTER TABLE users ADD COLUMN reset_password_code TEXT")
+            # Novas colunas de perfil e segurança
+            new_user_cols = [
+                ("two_factor_pending_secret", "TEXT"),
+                ("two_factor_recovery", "TEXT"),
+                ("phone", "TEXT"),
+                ("company", "TEXT"),
+                ("avatar_path", "TEXT"),
+                ("locale_preference", "TEXT DEFAULT 'pt-BR'"),
+                ("password_changed_at", "TIMESTAMP"),
+            ]
+            for col_name, col_type in new_user_cols:
+                if col_name not in cols_usr:
+                    cursor.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
+
+            # Migrações seguras de colunas em auth_tokens
+            cols_tok = [col[1] for col in cursor.execute("PRAGMA table_info(auth_tokens)").fetchall()]
+            for col_name, col_type in [("last_seen_at", "TIMESTAMP"), ("ip_address", "TEXT"), ("user_agent", "TEXT")]:
+                if col_name not in cols_tok:
+                    cursor.execute(f"ALTER TABLE auth_tokens ADD COLUMN {col_name} {col_type}")
 
             # Migrações seguras de colunas em warmup_sessions
             cols_warm = [col[1] for col in cursor.execute("PRAGMA table_info(warmup_sessions)").fetchall()]
