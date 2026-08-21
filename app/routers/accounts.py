@@ -143,6 +143,25 @@ def _login_in_background(account_id: int) -> None:
     threading.Thread(target=job, daemon=True, name=f"login-acc-{account_id}").start()
 
 
+def _download_real_avatar(cl, acc: models.Account, info) -> None:
+    """Baixa a foto de perfil real do Instagram e salva localmente.
+
+    Se qualquer etapa falhar, apenas não atualiza o avatar (nunca inventa um).
+    """
+    url = getattr(info, "profile_pic_url_hd", None) or getattr(info, "profile_pic_url", None)
+    if not url:
+        return
+    try:
+        proxy = acc.proxy_url or None
+        with httpx.Client(proxy=proxy, timeout=15, follow_redirects=True) as client:
+            r = client.get(str(url))
+            if r.status_code == 200 and r.content:
+                avatar_file = config.DATA_DIR / f"avatar_{acc.id}.jpg"
+                avatar_file.write_bytes(r.content)
+    except Exception:
+        pass
+
+
 @router.post("/{account_id}/update-credentials", response_model=AccountOut)
 def update_credentials(account_id: int,
                        body: UpdateCredentialsIn,
@@ -250,6 +269,25 @@ def check_connection(account_id: int,
         if not cl.user_id:
             app_ctx.ig.login(acc)
         info = cl.user_info(cl.user_id)
+
+        # Persiste os dados REAIS do perfil no banco para que a tela de perfil
+        # mostre valores verdadeiros (e não zeros/placeholders).
+        acc.full_name = info.full_name or acc.full_name
+        acc.biography = getattr(info, "biography", None) or acc.biography
+        ext_url = getattr(info, "external_url", None)
+        if ext_url:
+            acc.external_url = str(ext_url)
+        acc.follower_count = int(getattr(info, "follower_count", 0) or 0)
+        acc.following_count = int(getattr(info, "following_count", 0) or 0)
+        acc.media_count = int(getattr(info, "media_count", 0) or 0)
+        acc.is_verified = bool(getattr(info, "is_verified", False))
+        acc.is_private = bool(getattr(info, "is_private", False))
+        acc.instagram_pk = str(info.pk)
+        db.commit()
+
+        # Baixa a foto de perfil REAL do Instagram para exibir o avatar autêntico.
+        _download_real_avatar(cl, acc, info)
+
         return {
             "status": "connected_real",
             "message": "Conectado com sucesso ao Instagram!",
@@ -314,8 +352,8 @@ def get_account_profile(account_id: int,
         biography=biography,
         external_url=external_url,
         profile_pic_url=profile_pic,
-        is_private=False,
-        is_verified=False,
+        is_private=bool(getattr(acc, "is_private", False)),
+        is_verified=bool(getattr(acc, "is_verified", False)),
         follower_count=followers,
         following_count=following,
         media_count=media_count,

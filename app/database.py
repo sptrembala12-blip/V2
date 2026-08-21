@@ -84,6 +84,9 @@ def init_db() -> None:
                 ("follower_count", "INTEGER DEFAULT 0"),
                 ("following_count", "INTEGER DEFAULT 0"),
                 ("media_count", "INTEGER DEFAULT 0"),
+                ("is_verified", "BOOLEAN DEFAULT 0"),
+                ("is_private", "BOOLEAN DEFAULT 0"),
+                ("instagram_pk", "TEXT"),
                 ("profile_pic_url", "TEXT"),
                 ("session_data", "TEXT"),
             ]

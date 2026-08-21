@@ -247,6 +247,11 @@ class WarmupManager:
             if not acc:
                 return
             is_sim = acc.simulate
+            s = db.get(models.WarmupSession, session_id)
+            opt_watch = bool(getattr(s, "watch_reels", True)) if s else True
+            opt_like = bool(getattr(s, "like_posts", True)) if s else True
+            opt_follow = bool(getattr(s, "follow_profiles", False)) if s else False
+            opt_explore = bool(getattr(s, "explore_tab", True)) if s else True
 
         self._append_log(
             session_id, "info",
@@ -338,80 +343,113 @@ class WarmupManager:
                         self._append_log(session_id, "erro", f"[IA] Falha na autenticação: {e}", status="erro")
                         return
 
-                    # Consulta perfil próprio
+                    # Consulta perfil próprio (ação real)
                     try:
                         cl.user_info(cl.user_id)
-                        self._append_log(session_id, "profile", f"[IA] Acessou perfil próprio na sessão móvel...")
+                        self._append_log(session_id, "profile", "[IA] Acessou perfil próprio na sessão móvel...")
                         time.sleep(random.uniform(3.0, 5.0))
                     except Exception:
                         pass
 
-                    # Consome Reels de hashtags regionais do país
-                    for tag in regional_tags[:2]:
+                    # Consome Reels reais de hashtags regionais do país.
+                    # IMPORTANTE: só registramos ações que REALMENTE aconteceram
+                    # no Instagram. Se a busca falhar, registramos o erro real e
+                    # seguimos — nunca inventamos criadores ou métricas.
+                    consumed_any = False
+                    for tag in regional_tags[:3]:
                         if stop_event.is_set():
                             break
                         try:
                             medias = cl.hashtag_medias_top(tag, amount=views_per_session)
-                        except Exception:
-                            medias = []
+                        except Exception as e:
+                            self._append_log(
+                                session_id, "aviso",
+                                f"[IA] Não foi possível carregar #{tag} agora ({type(e).__name__}). Tentando próxima tag...",
+                                total_views, total_likes, total_follows, current_day=day, cycles=cycles_done
+                            )
+                            time.sleep(random.uniform(2.0, 4.0))
+                            continue
 
-                        # Fallback se a hashtag não retornar itens
                         if not medias:
-                            for _ in range(views_per_session):
-                                if stop_event.is_set():
-                                    break
-                                creator = random.choice(regional_creators) + f"_{random.randint(10, 99)}"
-                                dwell = random.randint(min_dwell, max_dwell)
-                                self._append_log(
-                                    session_id, "view",
-                                    f"[IA] Assistindo Reel de @{creator} #{tag} ({dwell}s) com retenção natural...",
-                                    total_views + 1, total_likes, total_follows, current_day=day, cycles=cycles_done
-                                )
-                                total_views += 1
-                                time.sleep(random.uniform(2.5, 4.0))
+                            continue
 
-                                if (total_likes < day * 3) and random.random() < 0.5:
-                                    time.sleep(random.uniform(2.0, 3.5))
-                                    self._append_log(
-                                        session_id, "like",
-                                        f"[IA] Curtida aplicada no Reel em alta de @{creator}",
-                                        total_views, total_likes + 1, total_follows, current_day=day, cycles=cycles_done
-                                    )
-                                    total_likes += 1
-                                    time.sleep(random.uniform(2.5, 4.5))
-                        else:
-                            for m in medias:
-                                if stop_event.is_set():
-                                    break
-                                m_id = getattr(m, "id", None) or getattr(m, "pk", "")
-                                username = getattr(m.user, "username", "criador") if hasattr(m, "user") and m.user else "perfil"
-                                dwell = random.randint(min_dwell, max_dwell)
+                        consumed_any = True
+                        for m in medias:
+                            if stop_event.is_set():
+                                break
+                            m_id = getattr(m, "id", None) or getattr(m, "pk", "")
+                            if not m_id:
+                                continue
+                            m_user = getattr(m, "user", None)
+                            username = getattr(m_user, "username", None) or "perfil"
+                            m_user_id = getattr(m_user, "pk", None) or getattr(m_user, "id", None)
+                            dwell = random.randint(min_dwell, max_dwell)
 
-                                self._append_log(
-                                    session_id, "view",
-                                    f"[IA] Assistindo Reel de @{username} #{tag} ({dwell}s)...",
-                                    total_views + 1, total_likes, total_follows, current_day=day, cycles=cycles_done
-                                )
+                            # Visualização real (media_seen) — só conta se o watch estiver ligado
+                            if opt_watch:
+                                seen_ok = False
                                 try:
                                     cl.media_seen([str(m_id)])
+                                    seen_ok = True
+                                except Exception:
+                                    seen_ok = False
+                                if seen_ok:
+                                    total_views += 1
+                                    self._append_log(
+                                        session_id, "view",
+                                        f"[IA] Assistiu Reel real de @{username} #{tag} ({dwell}s de retenção).",
+                                        total_views, total_likes, total_follows, current_day=day, cycles=cycles_done
+                                    )
+                                    time.sleep(random.uniform(max(3, acc.delay_min), max(6, acc.delay_max)))
+
+                            # Curtida real (media_like) — só registra se a API confirmar
+                            if opt_like and (total_likes < day * 3) and random.random() < 0.5:
+                                try:
+                                    if cl.media_like(str(m_id)):
+                                        total_likes += 1
+                                        self._append_log(
+                                            session_id, "like",
+                                            f"[IA] Curtida real aplicada no Reel de @{username}.",
+                                            total_views, total_likes, total_follows, current_day=day, cycles=cycles_done
+                                        )
+                                        time.sleep(random.uniform(max(4, acc.delay_min), max(7, acc.delay_max)))
                                 except Exception:
                                     pass
-                                total_views += 1
-                                time.sleep(random.uniform(max(3, acc.delay_min), max(6, acc.delay_max)))
 
-                                if (total_likes < day * 3) and random.random() < 0.5:
-                                    try:
-                                        res_like = cl.media_like(str(m_id))
-                                        if res_like:
-                                            self._append_log(
-                                                session_id, "like",
-                                                f"[IA] Curtida aplicada no Reel de @{username}",
-                                                total_views, total_likes + 1, total_follows
-                                            )
-                                            total_likes += 1
-                                    except Exception:
-                                        pass
-                                    time.sleep(random.uniform(max(4, acc.delay_min), max(7, acc.delay_max)))
+                            # Follow real (user_follow) — só registra se a API confirmar
+                            if opt_follow and m_user_id and (total_follows < day) and random.random() < 0.25:
+                                try:
+                                    if cl.user_follow(str(m_user_id)):
+                                        total_follows += 1
+                                        self._append_log(
+                                            session_id, "follow",
+                                            f"[IA] Seguiu perfil real @{username} para reforçar afinidade regional.",
+                                            total_views, total_likes, total_follows, current_day=day, cycles=cycles_done
+                                        )
+                                        time.sleep(random.uniform(max(4, acc.delay_min), max(8, acc.delay_max)))
+                                except Exception:
+                                    pass
+
+                    # Exploração real da aba (explore/reels) — ação genuína de rede
+                    if opt_explore and not stop_event.is_set():
+                        try:
+                            cl.get_timeline_feed()
+                            self._append_log(
+                                session_id, "explore",
+                                f"[IA] Explorou o feed/aba de tendências de {country_name} (requisição real).",
+                                total_views, total_likes, total_follows, current_day=day, cycles=cycles_done
+                            )
+                            time.sleep(random.uniform(3.0, 5.0))
+                        except Exception:
+                            pass
+
+                    if not consumed_any:
+                        self._append_log(
+                            session_id, "aviso",
+                            "[IA] Nenhuma mídia regional retornada nesta sessão (rate limit ou hashtags vazias). "
+                            "Nenhuma métrica fictícia foi contabilizada — aguardando próxima janela.",
+                            total_views, total_likes, total_follows, current_day=day, cycles=cycles_done
+                        )
 
                 cycles_done += 1
 
