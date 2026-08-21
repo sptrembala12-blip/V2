@@ -333,6 +333,39 @@ def map_login_error(e: Exception) -> tuple[str, str]:
     if isinstance(e, LoginRequired):
         return ACCOUNT_STATUS_ERROR, "Sessão expirada. Clique em 'Reconectar' para atualizar o acesso."
 
+    # Erros de rede / TLS: sem rota até o Instagram (ambiente sem internet de
+    # saída, proxy fora do ar/errado, DNS bloqueado ou firewall).
+    _low = err_str.lower()
+    _net_signs = (
+        "tls/ssl connection has been closed", "_ssl.c", "eof occurred",
+        "connecterror", "connecttimeout", "connectionerror", "connection refused",
+        "connection reset", "connection aborted", "network is unreachable",
+        "temporary failure in name resolution", "name or service not known",
+        "getaddrinfo failed", "max retries exceeded", "ssleoferror",
+        "connectproxyerror", "proxyerror", "read timed out", "timed out",
+    )
+    if any(s in _low for s in _net_signs) or err_type in (
+        "ConnectError", "ConnectTimeout", "ConnectionError", "ReadTimeout",
+        "ConnectProxyError", "ProxyError", "SSLError", "SSLEOFError",
+    ):
+        # Só atribui ao proxy quando o erro indica autenticação/407 de proxy.
+        # (O aiograpi usa o nome ConnectProxyError mesmo em conexões diretas.)
+        if "407" in _low or "proxy authentication" in _low or "proxyerror" == err_type.lower():
+            return (
+                ACCOUNT_STATUS_ERROR,
+                "Não foi possível conectar ao Instagram através do proxy configurado. "
+                "Verifique se o proxy está ativo e correto (use o botão 'Testar Proxy'), "
+                "ou remova o proxy para usar a conexão direta do servidor.",
+            )
+        return (
+            ACCOUNT_STATUS_ERROR,
+            "Não foi possível alcançar o Instagram (falha de rede/TLS). "
+            "Isso acontece quando o servidor não tem acesso à internet de saída — "
+            "comum no ambiente de teste/preview. Rode o app em um servidor com internet "
+            "(Render, Fly.io, VPS ou seu computador) e, se necessário, configure um proxy "
+            "residencial/móvel. Detalhe técnico: " + err_str,
+        )
+
     if isinstance(e, ClientError):
         return ACCOUNT_STATUS_ERROR, f"Mensagem do Instagram: {err_str}"
 
