@@ -1,6 +1,9 @@
 """
 Motor de Maturação Automática de Contas com IA 24/7 (Ciclos Humanos e Segmentação por País).
-Executa ciclos autônomos durante 3 dias consumindo conteúdo regional do país selecionado para treinar o algoritmo da Meta.
+Executa ciclos autônomos consumindo conteúdo regional real e alinhando os sinais
+de localização do aparelho (idioma/fuso/país) ao país-alvo, para maturar a conta
+com atividade legítima. O fator dominante de segmentação continua sendo o IP do
+proxy do país — o robô cuida da parte automatizável de forma real e segura.
 """
 from __future__ import annotations
 
@@ -22,56 +25,67 @@ def _now() -> datetime:
 COUNTRY_CONFIGS: Dict[str, Dict[str, Any]] = {
     "BR": {
         "name": "Brasil",
+        "locale": "pt_BR", "country_code": 55, "tz_offset": -3 * 3600,
         "tags": ["reelsbrasil", "explorebrasil", "humorbrasil", "viralbrasil", "tendenciasbrasil", "brasil", "cortesbrasil", "musica"],
         "creators": ["reelsbrasil", "humorbrasil", "explore", "cinemaepipoca", "videosvirais", "cortesdodia", "reels_br"],
     },
     "US": {
         "name": "Estados Unidos",
+        "locale": "en_US", "country_code": 1, "tz_offset": -5 * 3600,
         "tags": ["reels", "viral", "trending", "explorepage", "funny", "usa", "nyc", "california", "reelsusa"],
         "creators": ["creators", "instagram", "reels", "trending", "usaviral", "dailyreels", "reels_us"],
     },
     "PT": {
         "name": "Portugal",
+        "locale": "pt_PT", "country_code": 351, "tz_offset": 0,
         "tags": ["portugal", "reelsportugal", "lisboa", "porto", "algarve", "humorportugal", "viralpt"],
         "creators": ["portugal", "lisboncreators", "reelsportugal", "explorept", "humor_pt"],
     },
     "ES": {
         "name": "Espanha",
+        "locale": "es_ES", "country_code": 34, "tz_offset": 1 * 3600,
         "tags": ["espana", "madrid", "barcelona", "reelespana", "humorespanol", "tendencias"],
         "creators": ["espana", "madridcreators", "reelespana", "viralspain", "humor_es"],
     },
     "UK": {
         "name": "Reino Unido",
+        "locale": "en_GB", "country_code": 44, "tz_offset": 0,
         "tags": ["uk", "london", "reelsuk", "manchester", "britishhumour", "trendinguk"],
         "creators": ["ukcreators", "london", "reelsuk", "britishviral", "trending_uk"],
     },
     "MX": {
         "name": "México",
+        "locale": "es_MX", "country_code": 52, "tz_offset": -6 * 3600,
         "tags": ["mexico", "cdmx", "reelsmexico", "humormexicano", "monterrey", "guadalajara"],
         "creators": ["mexicocreators", "cdmx", "reelsmexico", "viralmexico", "humor_mx"],
     },
     "FR": {
         "name": "França",
+        "locale": "fr_FR", "country_code": 33, "tz_offset": 1 * 3600,
         "tags": ["france", "paris", "reelsfrance", "humourfrancais", "tendances", "frenchreels"],
         "creators": ["france", "pariscreators", "reelsfrance", "explorefrance", "paris_life"],
     },
     "DE": {
         "name": "Alemanha",
+        "locale": "de_DE", "country_code": 49, "tz_offset": 1 * 3600,
         "tags": ["deutschland", "berlin", "reelsgermany", "lustig", "muenchen", "hamburg"],
         "creators": ["deutschland", "berlincreators", "reelsgermany", "exploregermany", "berlin_viral"],
     },
     "IT": {
         "name": "Itália",
+        "locale": "it_IT", "country_code": 39, "tz_offset": 1 * 3600,
         "tags": ["italia", "roma", "milano", "reelsitalia", "divertente", "napoli"],
         "creators": ["italia", "milanocreators", "reelsitalia", "exploreitalia", "roma_life"],
     },
     "AR": {
         "name": "Argentina",
+        "locale": "es_AR", "country_code": 54, "tz_offset": -3 * 3600,
         "tags": ["argentina", "buenosaires", "humorargentino", "reelsargentina", "cordoba"],
         "creators": ["argentina", "buenosaires", "reelsargentina", "viralargentina", "humor_ar"],
     },
     "GLOBAL": {
         "name": "Global (Internacional)",
+        "locale": "en_US", "country_code": 1, "tz_offset": 0,
         "tags": ["explore", "reels", "viral", "trending", "instagram", "daily"],
         "creators": ["creators", "instagram", "reels", "explore", "trending_worldwide"],
     },
@@ -284,7 +298,7 @@ class WarmupManager:
                 views_per_session = 10
                 likes_per_session = 3
                 min_dwell, max_dwell = 7, 15
-                phase_desc = f"[IA] {day_label}: Blindagem do Algoritmo e engajamento ativo para entrega no país {country_name}."
+                phase_desc = f"[IA] {day_label}: Consolidação da atividade e engajamento regional em {country_name}."
 
             self._append_log(session_id, "fase", phase_desc, total_views, total_likes, total_follows, current_day=day)
 
@@ -342,6 +356,30 @@ class WarmupManager:
                     except Exception as e:
                         self._append_log(session_id, "erro", f"[IA] Falha na autenticação: {e}", status="erro")
                         return
+
+                    # SEGMENTAÇÃO REAL POR PAÍS: alinha os sinais de localização do
+                    # dispositivo (idioma, código do país e fuso) ao país-alvo. Estes
+                    # sinais têm peso real no perfil de interesses do algoritmo — muito
+                    # mais do que apenas assistir Reels. O fator dominante continua
+                    # sendo o IP do proxy do país (avisado ao usuário na UI).
+                    if session_idx == 1:
+                        try:
+                            cl.set_locale(country_cfg.get("locale", "en_US"))
+                            cl.set_country_code(country_cfg.get("country_code", 1))
+                            cl.set_timezone_offset(country_cfg.get("tz_offset", 0))
+                            proxy_note = (
+                                "com proxy do país (IP local)" if acc.proxy_url
+                                else "SEM proxy do país — recomende um proxy de "
+                                     f"{country_name} para segmentação eficaz"
+                            )
+                            self._append_log(
+                                session_id, "geo",
+                                f"[IA] Localização do aparelho alinhada a {country_name} "
+                                f"(idioma {country_cfg.get('locale')}, fuso e código +{country_cfg.get('country_code')}) {proxy_note}.",
+                                total_views, total_likes, total_follows, current_day=day, cycles=cycles_done,
+                            )
+                        except Exception:
+                            pass
 
                     # Consulta perfil próprio (ação real)
                     try:
@@ -478,7 +516,11 @@ class WarmupManager:
                 total_views, total_likes, total_follows, status="interrompido"
             )
         else:
-            final_summary = f"[IA] Conta 100% Aquecida e Blindada para {country_name}! O algoritmo da Meta está calibrado para entregar futuras postagens a este país. Pronta para postar!"
+            final_summary = (
+                f"[IA] Maturação concluída para {country_name}! A conta acumulou atividade real "
+                f"(visualizações, curtidas e follows), com idioma/fuso alinhados ao país. "
+                f"Para reforçar a entrega regional, mantenha um proxy de {country_name} e poste com constância."
+            )
             self._append_log(
                 session_id, "sucesso",
                 final_summary,

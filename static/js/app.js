@@ -1569,7 +1569,10 @@ async function initAquecimento() {
     <div class="card panel-form" style="margin-bottom:18px">
       <div class="section-title" style="margin-top:0">${ICONS.shield} Aquecer Conta 24/7 (Maturação por País com IA)</div>
       <div style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;line-height:1.5">
-        O robô autônomo opera <strong>24 horas por dia em ciclos humanos</strong> durante 3 dias: abre o app, assiste Reels regionais com 10 a 25s de retenção, aplica curtidas espaçadas, fecha o Instagram, descansa e reabre no próximo ciclo para treinar o algoritmo da Meta a entregar suas futuras postagens para o país escolhido.
+        O robô autônomo opera <strong>em ciclos humanos</strong> por 1 a 3 dias: alinha os sinais de localização do aparelho ao país-alvo (idioma, fuso e código do país), abre o app, assiste Reels regionais reais com retenção, aplica curtidas e follows espaçados, descansa e reabre no próximo ciclo. Isso <strong>matura a conta com atividade real</strong> e ensina o seu explorador a reconhecer conteúdo daquele país.
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px;line-height:1.5;padding:8px 10px;background:var(--bg-card-sub);border:1px solid var(--border);border-radius:var(--radius-sm)">
+        <strong>Como funciona de verdade:</strong> a segmentação por país depende principalmente do <strong>IP do proxy</strong> (use um proxy do país-alvo), do idioma/fuso do aparelho e de quem engaja com seus posts. O consumo de Reels reforça o perfil de interesses, mas nenhuma ferramenta "força" a Meta a entregar posts a um país só assistindo vídeos. Este robô cuida da parte que dá para automatizar de forma real e segura.
       </div>
 
       <form id="warmup-form" onsubmit="return false;">
@@ -1582,7 +1585,7 @@ async function initAquecimento() {
           </label>
 
           <label class="field">
-            <span>País Alvo de Entrega (Segmentação de Algoritmo)</span>
+            <span>País Alvo (Idioma, Fuso & Conteúdo Regional)</span>
             <select class="input" id="warmup-country" required>
               <option value="BR" selected>Brasil (BR) — Conteúdos e Criadores Nacionais</option>
               <option value="US">Estados Unidos (US) — Viral & Trending USA</option>
@@ -1621,7 +1624,7 @@ async function initAquecimento() {
 
         <div style="padding:10px 12px;background:var(--accent-surface);border:1px solid rgba(99,102,241,0.25);border-radius:var(--radius-sm);margin:8px 0 14px">
           <div style="font-size:11.5px;color:var(--text-primary);font-weight:600" id="warmup-country-desc">
-            Segmentação Ativa: O robô consumirá Reels e hashtags de criadores do Brasil para que suas futuras postagens sejam entregues prioritariamente ao público brasileiro.
+            Segmentação para Brasil: o aparelho será alinhado ao idioma/fuso do Brasil e o robô consumirá Reels e criadores brasileiros reais. Para melhor resultado, use um proxy com IP do Brasil nesta conta.
           </div>
         </div>
 
@@ -1642,7 +1645,7 @@ async function initAquecimento() {
       AR: "da Argentina", GLOBAL: "Globais Internacionais"
     };
     const cName = countryNames[val] || "do país selecionado";
-    $("#warmup-country-desc").textContent = `Segmentação Ativa: O robô consumirá Reels e hashtags de criadores ${cName} para que suas futuras postagens sejam entregues prioritariamente a esse público.`;
+    $("#warmup-country-desc").textContent = `Segmentação ${cName}: o aparelho será alinhado ao idioma/fuso desse país e o robô consumirá Reels e criadores reais ${cName}. Para melhor resultado, use um proxy com IP ${cName} nesta conta.`;
   };
 
   $("#warmup-days").onchange = (e) => {
