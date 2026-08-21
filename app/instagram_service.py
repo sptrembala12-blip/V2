@@ -19,7 +19,7 @@ from aiograpi.exceptions import (
     TwoFactorRequired,
 )
 
-from . import config, fingerprint, security
+from . import config, fingerprint, retry_util, security
 from .aiograpi_bridge import Client, as_async_handler
 
 ACCOUNT_STATUS_ACTIVE = "ativo"
@@ -190,12 +190,23 @@ class IGManager:
             cl.set_locale("pt_BR")
             cl.set_timezone_offset(-3 * 3600)
 
-            # Login normal com Username e Password e suporte a verification_code (2FA)
-            cl.login(
-                account.ig_username,
-                password,
-                relogin=False,
-                verification_code=verification_code.strip() if verification_code else "",
+            # Login normal com Username e Password e suporte a verification_code (2FA).
+            # Reexecuta automaticamente em falhas transitórias de rede/TLS.
+            def _do_login():
+                return cl.login(
+                    account.ig_username,
+                    password,
+                    relogin=False,
+                    verification_code=verification_code.strip() if verification_code else "",
+                )
+
+            retry_util.with_retry(
+                _do_login,
+                on_retry=lambda n, e: self.update_status(
+                    account.id,
+                    ACCOUNT_STATUS_CONNECTING,
+                    f"Instabilidade de rede ao conectar (tentativa {n}). Reconectando automaticamente...",
+                ),
             )
 
         self.save_session(account.id, cl)

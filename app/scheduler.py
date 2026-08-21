@@ -4,7 +4,7 @@ Agendador de postagens (APScheduler) no Fuso Horário de Brasília.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -32,6 +32,67 @@ class SchedulerManager:
     def start(self) -> None:
         self.scheduler.start()
         self.rebuild()
+        self._register_maintenance_jobs()
+
+    def _register_maintenance_jobs(self) -> None:
+        """Registra tarefas de manutenção: retenção de logs e health-check."""
+        # Limpeza de logs antigos (diária)
+        if config.LOG_RETENTION_DAYS and config.LOG_RETENTION_DAYS > 0:
+            self.scheduler.add_job(
+                self._cleanup_old_logs,
+                trigger=IntervalTrigger(hours=24, timezone=self.tz),
+                id="maintenance-log-cleanup",
+                replace_existing=True,
+                next_run_time=datetime.now(self.tz) + timedelta(minutes=5),
+            )
+
+        # Health-check periódico de contas (opcional)
+        if config.ACCOUNT_HEALTHCHECK_MINUTES and config.ACCOUNT_HEALTHCHECK_MINUTES > 0:
+            self.scheduler.add_job(
+                self._healthcheck_accounts,
+                trigger=IntervalTrigger(minutes=config.ACCOUNT_HEALTHCHECK_MINUTES, timezone=self.tz),
+                id="maintenance-account-healthcheck",
+                replace_existing=True,
+                next_run_time=datetime.now(self.tz) + timedelta(minutes=2),
+            )
+
+    def _cleanup_old_logs(self) -> None:
+        """Remove logs de postagem mais antigos que LOG_RETENTION_DAYS."""
+        try:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=config.LOG_RETENTION_DAYS)
+            with self.session_factory() as db:
+                deleted = (
+                    db.query(models.PostLog)
+                    .filter(models.PostLog.created_at < cutoff)
+                    .delete(synchronize_session=False)
+                )
+                db.commit()
+                if deleted:
+                    print(f"[Manutenção] {deleted} logs antigos removidos (retenção: {config.LOG_RETENTION_DAYS}d).")
+        except Exception as e:
+            print(f"[Manutenção] Falha na limpeza de logs: {e}")
+
+    def _healthcheck_accounts(self) -> None:
+        """Valida sessões das contas reais e atualiza o status no banco."""
+        try:
+            from .main_ctx import app_ctx
+            with self.session_factory() as db:
+                accounts = db.query(models.Account).filter(models.Account.simulate.is_(False)).all()
+                account_ids = [a.id for a in accounts]
+            for acc_id in account_ids:
+                try:
+                    with self.session_factory() as db:
+                        acc = db.get(models.Account, acc_id)
+                        if not acc:
+                            continue
+                        cl = app_ctx.ig.get_client(acc)
+                        if app_ctx.ig.validate_existing_session(acc, cl):
+                            app_ctx.ig.update_status(acc.id, "ativo", "Sessão válida (health-check automático).")
+                except Exception:
+                    # Health-check nunca deve derrubar o scheduler
+                    pass
+        except Exception as e:
+            print(f"[Manutenção] Falha no health-check de contas: {e}")
 
     def shutdown(self) -> None:
         try:

@@ -9,7 +9,7 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import config, media, models
@@ -165,6 +165,30 @@ class PostingService:
                     action=f"fila_{post_target}_concluida", status="success",
                     message="Todos os vídeos/fotos da lista já foram enviados. Fila finalizada com sucesso (sem repetição).",
                     run_by=run_by
+                )
+                return
+
+        # 1.5) Limite anti-ban por conta (janela de 24h). Protege contra
+        # padrões de postagem que disparam bloqueios do Instagram. Só vale para
+        # postagens reais (o modo simulação não conta).
+        if not account.simulate and config.MAX_POSTS_PER_DAY > 0:
+            since = _now() - timedelta(hours=24)
+            posts_24h = (
+                db.query(models.PostLog)
+                .filter(
+                    models.PostLog.account_id == account.id,
+                    models.PostLog.status == "success",
+                    models.PostLog.action.like("post_%"),
+                    models.PostLog.created_at >= since,
+                )
+                .count()
+            )
+            if posts_24h >= config.MAX_POSTS_PER_DAY:
+                self._log(
+                    db, account, schedule, m, f"limite_diario_{post_target}", "error",
+                    f"Limite de segurança anti-ban atingido ({config.MAX_POSTS_PER_DAY} posts/24h) "
+                    f"para esta conta. Postagem adiada para proteger o perfil.",
+                    run_by=run_by,
                 )
                 return
 
