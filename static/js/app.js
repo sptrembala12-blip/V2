@@ -2414,11 +2414,6 @@ async function renderSettingsPerfil(panel) {
             <input type="file" id="avatar-file" accept="image/jpeg,image/png,image/webp" style="display:none">
             <button class="btn sm" id="btn-upload-avatar">${ICONS.upload} ${p.avatar_url ? "Trocar foto" : "Enviar foto"}</button>
             ${p.avatar_url ? `<button class="btn sm ghost" id="btn-remove-avatar">${ICONS.trash} Remover foto</button>` : ""}
-            <div style="font-size:11px;color:var(--text-muted);line-height:1.5;margin-top:2px">
-              ${ICONS.check} JPG, PNG ou WebP<br>
-              ${ICONS.check} Até 8 MB · quadrada fica melhor<br>
-              ${ICONS.shield} Metadados removidos automaticamente
-            </div>
           </div>
         </div>
       </div>
