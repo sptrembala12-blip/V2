@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+data/*.db
+data/media/*
+data/variants/*
+data/sessions/*
+data/tunnel.url
+data/public_urls.json
+data/secret.key
+.DS_Store
+*.log
+
+# Ambientes virtuais
+.venv/
+venv/
+
+# Binários grandes / artefatos redundantes (não versionar)
+cloudflared
+instaflow.zip

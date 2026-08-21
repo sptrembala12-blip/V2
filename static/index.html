@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>InstaFlow — Automação & Rotação de Mídias</title>
+  
+  <!-- PWA Settings (iOS, Android, PC) -->
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#06080d" id="meta-theme-color">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="InstaFlow">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+  <meta name="mobile-web-app-capable" content="yes">
+
+  <link rel="stylesheet" href="/static/css/style.css?v=502">
+</head>
+<body>
+
+  <!-- ================= LOGIN / REGISTER VIEW ================= -->
+  <div id="login-view">
+    <div class="login-card">
+      <div class="logo-header">
+        <div class="logo-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+        </div>
+        <div class="logo-text">Insta<span>Flow</span></div>
+      </div>
+      <p class="login-sub">Painel de automação para Instagram com rotação inteligente, limpeza de metadados e agendador 24/7.</p>
+
+      <!-- Abas Entrar / Criar Conta -->
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tab-btn-login" type="button">Entrar</button>
+        <button class="auth-tab" id="tab-btn-register" type="button">Criar Conta</button>
+      </div>
+
+      <!-- Formulário de Login (Apenas E-mail e Senha) -->
+      <form id="login-form" onsubmit="return false;">
+        <label class="field">
+          <span>E-mail</span>
+          <input class="input" type="email" id="login-email" placeholder="seu@email.com" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+        </label>
+        <label class="field">
+          <span>Senha</span>
+          <input class="input" type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" required>
+        </label>
+        <button class="btn primary" style="width:100%;margin-top:6px" id="btn-login" type="button">Entrar</button>
+      </form>
+
+      <!-- Formulário de Registro (Nome, E-mail, Senha e Confirmar Senha) -->
+      <form id="register-form" class="hidden" onsubmit="return false;">
+        <label class="field">
+          <span>Nome</span>
+          <input class="input" type="text" id="reg-name" placeholder="Seu Nome" autocomplete="name" autocapitalize="words" required>
+        </label>
+        <label class="field">
+          <span>E-mail</span>
+          <input class="input" type="email" id="reg-email" placeholder="seu@email.com" autocomplete="email" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+        </label>
+        <label class="field">
+          <span>Senha</span>
+          <input class="input" type="password" id="reg-password" placeholder="••••••••" autocomplete="new-password" required>
+        </label>
+        <label class="field">
+          <span>Confirmar Senha</span>
+          <input class="input" type="password" id="reg-password-confirm" placeholder="••••••••" autocomplete="new-password" required>
+        </label>
+        <button class="btn primary" style="width:100%;margin-top:6px" id="btn-register" type="button">Criar Conta</button>
+      </form>
+
+      <!-- Formulário de Confirmação por Código de E-mail -->
+      <form id="verify-email-form" class="hidden" onsubmit="return false;">
+        <div style="font-size:12.5px;color:var(--text-secondary);margin-bottom:14px;line-height:1.45" id="verify-sub-text">
+          Enviamos um código de 6 dígitos para o seu e-mail. Digite o código abaixo para ativar sua conta:
+        </div>
+        <label class="field">
+          <span>Código de Verificação de 6 Dígitos</span>
+          <input class="input" id="reg-verif-code-input" placeholder="Ex: 123456" maxlength="6" style="font-size:18px;letter-spacing:4px;text-align:center;font-weight:700" required>
+        </label>
+        <button class="btn primary" style="width:100%;margin-top:6px" id="btn-confirm-email-code" type="button">Validar Código e Entrar</button>
+        <div style="display:flex;justify-content:space-between;margin-top:12px">
+          <button type="button" class="btn ghost sm" id="btn-resend-signup-code" style="font-size:11.5px">Reenviar Código</button>
+          <button type="button" class="btn ghost sm" id="btn-back-to-signup" style="font-size:11.5px">Voltar</button>
+        </div>
+      </form>
+
+      <div class="login-info-box">
+        <strong>Motor de Automação & Segurança:</strong>
+        Ambiente protegido com rotação de mídias sem duplicação, emulação de hardware móvel e disparo pontual 24/7.
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= APP VIEW ================= -->
+  <div id="app-view" class="hidden">
+    <!-- Desktop Hover Trigger Strip -->
+    <div id="sidebar-hover-zone"></div>
+
+    <!-- Desktop / Mobile Sidebar Drawer -->
+    <aside class="sidebar" id="sidebar-drawer">
+      <div class="logo-header">
+        <div class="logo-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+        </div>
+        <div class="logo-text">Insta<span>Flow</span></div>
+        <button class="btn ghost sm drawer-close-btn" id="btn-close-drawer" title="Fechar Menu">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <nav class="nav-list">
+        <button class="nav-btn" data-view="dashboard">
+          <span class="ico" id="nav-ico-dashboard"></span>
+          <span class="txt">Dashboard</span>
+        </button>
+        <button class="nav-btn" data-view="contas">
+          <span class="ico" id="nav-ico-contas"></span>
+          <span class="txt">Contas</span>
+        </button>
+        <button class="nav-btn" data-view="midias">
+          <span class="ico" id="nav-ico-midias"></span>
+          <span class="txt">Mídias</span>
+        </button>
+        <button class="nav-btn" data-view="agendamentos">
+          <span class="ico" id="nav-ico-agendamentos"></span>
+          <span class="txt">Agendamentos</span>
+        </button>
+        <button class="nav-btn" data-view="aquecimento">
+          <span class="ico" id="nav-ico-aquecimento"></span>
+          <span class="txt">Aquecer Conta</span>
+        </button>
+        <button class="nav-btn" data-view="gerador_email">
+          <span class="ico" id="nav-ico-gerador-email"></span>
+          <span class="txt">Gerador de E-mail</span>
+        </button>
+        <button class="nav-btn" data-view="publicacoes">
+          <span class="ico" id="nav-ico-publicacoes"></span>
+          <span class="txt">Publicações</span>
+        </button>
+        <button class="nav-btn" data-view="configuracoes">
+          <span class="ico" id="nav-ico-configuracoes"></span>
+          <span class="txt">Configurações</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-badge">
+          <div class="user-avatar" id="avatar">U</div>
+          <div class="user-email-text" id="user-email">usuario</div>
+        </div>
+        <button class="btn ghost sm" id="btn-logout" title="Sair do sistema">
+          <span class="ico" id="logout-ico"></span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Overlay Backdrop para o Drawer em Mobile/Tablet -->
+    <div id="drawer-backdrop"></div>
+
+    <!-- Main Area -->
+    <div class="main-area">
+      <header class="topbar">
+        <div style="display:flex;align-items:center;gap:12px">
+          <!-- Botão Hambúrguer -->
+          <button class="btn ghost sm hamburger-btn" id="btn-hamburger" title="Abrir Menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+          <div>
+            <h2 id="page-title">Dashboard</h2>
+            <div class="sub" id="page-sub">Visão geral da sua operação</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn sm ghost" id="btn-theme-quick" title="Alternar Tema (Claro / Escuro / Auto)">
+            <span class="ico" id="theme-ico"></span>
+          </button>
+          <button class="btn sm ghost hidden" id="btn-pwa-install">Instalar App</button>
+          <div id="topbar-actions"></div>
+          <button class="btn sm ghost" id="btn-logout-topbar" title="Sair da Conta">
+            <span class="ico" id="logout-topbar-ico"></span>
+          </button>
+        </div>
+      </header>
+
+      <main class="content" id="content"></main>
+    </div>
+
+    <!-- Mobile Bottom Navigation Bar (Nativa para Smartphone - 6 Abas Principais) -->
+    <nav class="mobile-bottom-nav">
+      <button class="mobile-nav-item active" data-view="dashboard">
+        <span class="ico" id="mob-ico-dashboard"></span>
+        <span class="txt">Início</span>
+      </button>
+      <button class="mobile-nav-item" data-view="contas">
+        <span class="ico" id="mob-ico-contas"></span>
+        <span class="txt">Contas</span>
+      </button>
+      <button class="mobile-nav-item" data-view="midias">
+        <span class="ico" id="mob-ico-midias"></span>
+        <span class="txt">Mídias</span>
+      </button>
+      <button class="mobile-nav-item" data-view="agendamentos">
+        <span class="ico" id="mob-ico-agendamentos"></span>
+        <span class="txt">Agenda</span>
+      </button>
+      <button class="mobile-nav-item" data-view="aquecimento">
+        <span class="ico" id="mob-ico-aquecimento"></span>
+        <span class="txt">Aquecer</span>
+      </button>
+      <button class="mobile-nav-item" data-view="configuracoes">
+        <span class="ico" id="mob-ico-configuracoes"></span>
+        <span class="txt">Ajustes</span>
+      </button>
+    </nav>
+  </div>
+
+  <div id="toasts"></div>
+  <div id="modal-backdrop"><div class="modal" id="modal"></div></div>
+
+  <script src="/static/js/app.js?v=502"></script>
+</body>
+</html>
