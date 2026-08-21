@@ -824,7 +824,11 @@ function accountForm() {
         </label>
         <label class="field">
           <span>Proxy Residencial / Móvel (Opcional)</span>
-          <input class="input" name="proxy_url" placeholder="http://usuario:senha@ip:porta ou IP:PORT:USER:PASS">
+          <input class="input" id="acct-proxy-input" name="proxy_url" placeholder="http://usuario:senha@ip:porta ou IP:PORT:USER:PASS">
+          <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">
+            <button type="button" class="btn sm ghost" id="btn-test-proxy" style="font-size:11px">${ICONS.shield} Testar Proxy</button>
+            <span id="proxy-test-result" style="font-size:11px;color:var(--text-muted)">Opcional — deixe em branco para usar a conexão direta do servidor.</span>
+          </div>
         </label>
       </div>
 
@@ -875,6 +879,44 @@ function bindAccountForm() {
 
   if (btnTog && boxSess) btnTog.onclick = () => boxSess.classList.toggle("hidden");
   if (inpSess && pwdInp) inpSess.oninput = () => { if (inpSess.value.trim()) pwdInp.value = inpSess.value.trim(); };
+
+  const btnTestProxy = $("#btn-test-proxy");
+  const proxyInp = $("#acct-proxy-input");
+  const proxyRes = $("#proxy-test-result");
+  if (btnTestProxy && proxyInp && proxyRes) {
+    btnTestProxy.onclick = async () => {
+      const val = proxyInp.value.trim();
+      if (!val) {
+        proxyRes.textContent = "Nenhum proxy informado — será usada a conexão direta do servidor.";
+        proxyRes.style.color = "var(--text-muted)";
+        return;
+      }
+      const original = btnTestProxy.innerHTML;
+      btnTestProxy.disabled = true;
+      btnTestProxy.innerHTML = "Testando...";
+      proxyRes.textContent = "Verificando conexão e IP de saída...";
+      proxyRes.style.color = "var(--text-muted)";
+      try {
+        const r = await api("/api/accounts/validate-proxy", { method: "POST", body: { proxy_url: val } });
+        if (r.ok) {
+          proxyRes.textContent = `IP de saída: ${r.ip} · Latência: ${r.latency_ms}ms`;
+          proxyRes.style.color = "var(--green)";
+          toast("Proxy funcionando!", "ok");
+        } else {
+          proxyRes.textContent = r.message || "Falha ao validar o proxy.";
+          proxyRes.style.color = "var(--red)";
+          toast(r.message || "Proxy inválido.", "err");
+        }
+      } catch (err) {
+        proxyRes.textContent = err.message || "Falha ao validar o proxy.";
+        proxyRes.style.color = "var(--red)";
+        toast(err.message || "Falha ao testar proxy.", "err");
+      } finally {
+        btnTestProxy.disabled = false;
+        btnTestProxy.innerHTML = original;
+      }
+    };
+  }
 
   if (!f) return;
   f.onsubmit = async (e) => {
